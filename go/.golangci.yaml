@@ -1,0 +1,208 @@
+# Strict quality gates for the Go template (see LANG_SPEC.md for the
+# rationale behind every knob). Config schema: golangci-lint v2, pinned in
+# verify.sh's deps phase; `golangci-lint config verify` validates this file.
+version: "2"
+
+linters:
+  # The "standard" group (errcheck, govet, ineffassign, staticcheck, unused)
+  # plus the explicit strictness additions below. bad_examples/ is a nested
+  # Go module, so ./... never reaches it by construction; fixtures are
+  # probed only by bad_examples/assert.sh with explicit scoping.
+  default: standard
+  enable:
+    - containedctx     # context.Context belongs first in signatures
+    - contextcheck     # ctx must flow down, never be recreated mid-chain
+    - cyclop           # cyclomatic complexity ceiling (10)
+    - depguard         # executable layer map: domain <- application <- adapters
+    - errorlint        # %w wrapping and errors.Is/As instead of comparison/casts
+    - exhaustive       # switches over enums must list every case (default case does NOT satisfy)
+    - exhaustruct_v5   # composite literals must name every field of domain structs
+    - forbidigo        # bans fmt.Print* and time.Now outside their sanctioned homes
+    - funlen           # function length ceiling (60 lines / 40 statements)
+    - gocognit         # cognitive complexity ceiling (15)
+    - gosec            # SAST: hardcoded credentials, weak crypto, unsafe temp files
+    - godot            # doc comments end with a period
+    - ireturn          # no returning interfaces (stdlib/error/empty/anon allowed)
+    - misspell         # spelling mistakes in comments and strings
+    - nestif           # nested-if complexity ceiling (4)
+    - noctx            # HTTP requests carry a context
+    - nolintlint       # suppressions must name the linter AND justify themselves
+    - prealloc         # slices grown in loops get presized
+    - revive           # curated rule list: exported docs, naming, error strings
+    - sloglint         # no global loggers; logging takes a context
+    - unconvert        # no redundant type conversions
+    - unparam          # parameters that never vary are design smells
+    - wastedassign     # no assignments nobody reads
+    - whitespace       # no stray blank lines at block edges
+    - wrapcheck        # errors crossing package boundaries get wrapped with %w
+
+  settings:
+    cyclop:
+      max-complexity: 10
+    gocognit:
+      min-complexity: 15
+    funlen:
+      lines: 60
+      statements: 40
+    nestif:
+      min-complexity: 4
+
+    exhaustive:
+      # A default case is not an excuse to forget enum members: the state
+      # machine gains states, and every switch must grow with it.
+      default-signifies-exhaustive: false
+
+    exhaustruct_v5:
+      # Enforced exhaustiveness stays scoped to the pure core, where field
+      # completeness is the contract; wiring structs elsewhere stay free-form.
+      # explicit-mode keeps every other struct exempt from the check.
+      explicit-mode: true
+      enforce-patterns:
+        - ^warehouse/internal/domain\.
+        - ^warehouse/internal/application\.PlaceOrderResult$
+      allow-empty-returns: true
+
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+
+    sloglint:
+      no-global: all
+      context: all
+
+    forbidigo:
+      forbid:
+        - pattern: ^print(ln)?$
+          msg: builtin print is for prototyping, not production code
+        - pattern: ^fmt\.Print.*$
+          msg: printing belongs in cmd via os writers, not library code
+        - pattern: ^time\.Now$
+          msg: inject a Clock port instead; direct wall-clock reads hide nondeterminism
+
+    depguard:
+      # The layer map, executable: arrows point inward only.
+      #
+      #   adapters -> application -> domain
+      #
+      # Patterns are relative to the directory verify.sh runs from (the
+      # module root); the doubled globs keep the rule working regardless of
+      # how the tool presents paths.
+      rules:
+        domain-stays-pure:
+          files:
+            - "**/internal/domain/**"
+            - "internal/domain/**"
+          deny:
+            - pkg: warehouse/internal/application
+              desc: domain must not depend on the application layer
+            - pkg: warehouse/internal/adapters
+              desc: domain must not depend on outer layers
+        application-holds-the-ports:
+          files:
+            - "**/internal/application/**"
+            - "internal/application/**"
+          deny:
+            - pkg: warehouse/internal/adapters
+              desc: application depends on ports, never on adapter implementations
+        adapters-stay-independent:
+          files:
+            - "**/internal/adapters/**"
+            - "internal/adapters/**"
+          deny:
+            - pkg: warehouse/internal/adapters/inventory
+              desc: adapters must not import sibling adapters
+            - pkg: warehouse/internal/adapters/payments
+              desc: adapters must not import sibling adapters
+            - pkg: warehouse/internal/adapters/repository
+              desc: adapters must not import sibling adapters
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+
+    revive:
+      severity: error
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: useless-break
+        - name: var-declaration
+        - name: var-naming
+
+  exclusions:
+    # Fail loudly if one of these rules stops matching anything: silent
+    # exemption rot is exactly what the negative phase polices elsewhere.
+    warn-unused: true
+    rules:
+      # Tests wire adapter doubles into the use case; the production boundary
+      # (non-test files) remains fully depguarded, proven by the arch fixture.
+      - path: _test\.go
+        linters:
+          - depguard
+      # Invariant suites seed math/rand deterministically to generate table
+      # cases; gosec's weak-RNG finding targets security-sensitive use, which
+      # no test performs.
+      - path: _test\.go
+        linters:
+          - gosec
+      # cmd/ reports through os writers; that is the sanctioned print home.
+      - path: (^|/)cmd/
+        linters:
+          - forbidigo
+      # Tests may read the wall clock when pinning the RealClock contract or
+      # asserting recency; the ban targets nondeterminism in production code.
+      - path: _test\.go
+        linters:
+          - forbidigo
+      # The single sanctioned wall-clock read lives behind the Clock port.
+      - path: internal/adapters/clock\.go$
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gci       # import grouping: standard, third-party, module-local
+    - gofumpt   # stricter gofmt
+  settings:
+    gofumpt:
+      # Explicit module path + language version are REQUIRED here: without
+      # them the lint-side gofumpt check runs with an empty module path,
+      # misclassifies warehouse/* imports as standard library, and demands
+      # they be merged into the first import group (diverging from the fmt
+      # side, which resolves these from go.mod).
+      module-path: warehouse
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(warehouse)
+      custom-order: true
+
+# Deterministic output for humans and for bad_examples/assert.sh, which greps
+# stable "(lintername)" suffixes; ANSI color codes would break that contract.
+output:
+  formats:
+    text:
+      colors: false
+
+# Never truncate findings: a capped gate is a gate that lies.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

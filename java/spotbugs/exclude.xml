@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclusions for the Java template.
+
+  Suppression policy (docs/PHILOSOPHY.md principle 2): every <Match> below
+  must carry an XML comment naming the exact false-positive class it silences
+  and why the code is correct. An entry without a justification is treated as
+  gate tampering and rejected in review. Prefer fixing the code over adding
+  entries here.
+-->
+<FindBugsFilter>
+
+  <!-- In-memory adapters intentionally ALIAS mutable domain aggregates
+       (Order is a state machine, not a value): storing the caller's Order and
+       handing the same instance back through repository.get() is the port
+       contract itself (CONTRACTS.md §2 — save returns the persisted snapshot,
+       get returns order-or-absent). Deep-copying here would fake an isolation
+       guarantee the real boundary does not have and would break aggregate
+       identity (paying a copy would not move the stored order). EI_EXPOSE_REP
+       / EI_EXPOSE_REP2 cannot distinguish deliberate aggregate sharing from
+       accidental encapsulation leaks. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+</FindBugsFilter>

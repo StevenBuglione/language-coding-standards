@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PMD ruleset for the Java template: four categories, full-strength, with a
+  small reason-commented exclude list and property overrides that keep the
+  size/complexity ladder identical to checkstyle's (LANG_SPEC.md "Thresholds").
+
+  Suppression policy (docs/PHILOSOPHY.md principle 2): every <exclude> below
+  carries a comment naming the false-positive class it silences. An exclude
+  without a justification is treated as gate tampering.
+-->
+<ruleset name="warehouse-max-strict"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>Max-strict PMD for the canonical warehouse domain.</description>
+
+  <!-- ==== Error-prone ==================================================
+       Whole category active; the two exclusions below are documented. -->
+  <rule ref="category/java/errorprone.xml">
+    <!-- DataflowAnomalyAnalysis re-parses each method into a symbolic dataflow
+         graph and reports DD/UDD anomalies that are almost always legitimate
+         reassignment patterns (accumulator loops, try/finalize flows). The
+         same defect classes are covered without its false positives by
+         Error Prone + NullAway at compile time. -->
+    <exclude name="DataflowAnomalyAnalysis"/>
+    <!-- SwitchStmtsShouldHaveDefault demands `default` even where the switch
+         is exhaustive over a sealed hierarchy. Exhaustiveness is enforced by
+         javac itself (a missing case is a compile error), and adding default
+         would silence exactly that enforcement for future components. -->
+    <exclude name="SwitchStmtsShouldHaveDefault"/>
+    <!-- AvoidFieldNameMatchingMethodName fires on the record-style accessor
+         idiom (field `id` with accessor `id()`) that this codebase uses for
+         mutable entities and adapter state — records trigger it inherently,
+         and renaming accessors to getX() would fight the rest of the code. -->
+    <exclude name="AvoidFieldNameMatchingMethodName"/>
+  </rule>
+
+  <!-- ==== Multithreading ===============================================
+       UseConcurrentHashMap excluded: its heuristic flags every HashMap-typed
+       field as shared state, but every map in this template lives inside a
+       deliberately single-threaded test double (CONTRACTS.md §2 adapters);
+       swapping in ConcurrentHashMap would advertise thread safety nothing
+       verifies. Real concurrent collections must justify themselves in
+       review when they first appear. -->
+  <rule ref="category/java/multithreading.xml">
+    <exclude name="UseConcurrentHashMap"/>
+  </rule>
+
+  <!-- ==== Design =======================================================
+       Property overrides pin the parameter cap to the same number as
+       checkstyle's ParameterNumber 5. Method/file-length caps are NOT
+       duplicated here: PMD 7 consolidated ExcessiveMethodLength /
+       ExcessiveClassLength into GodClass + NcssCount, and the raw line
+       ladder lives in checkstyle/checkstyle.xml where it belongs. -->
+  <rule ref="category/java/design.xml">
+    <!-- LawOfDemeter flags fluent chains and record-component access on
+         value objects — the dominant idiom of this codebase. Boundary
+         discipline between layers is ArchUnit's job (arch phase), where
+         "wrong direction" is decidable. -->
+    <exclude name="LawOfDemeter"/>
+    <!-- UseObjectForClearerAPI fires on any method with >= 2 parameters of
+         the same primitive type, including Money(int minorUnits, ...)
+         constructors mandated by the canonical domain contract. -->
+    <exclude name="UseObjectForClearerAPI"/>
+  </rule>
+  <rule ref="category/java/design.xml/ExcessiveParameterList">
+    <properties>
+      <!-- Flag from the 6th parameter: matches checkstyle ParameterNumber 5. -->
+      <property name="minimum" value="6"/>
+    </properties>
+  </rule>
+
+  <!-- ==== Best practices =============================================== -->
+  <rule ref="category/java/bestpractices.xml"/>
+</ruleset>

@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+          "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+          "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Curated Checkstyle configuration for the Java template.
+
+  Division of labor: google-java-format owns LAYOUT (whitespace, braces,
+  line wrapping) via the format phase; this file owns STRUCTURE, NAMING,
+  SIZE caps, IMPORT hygiene and DOC presence. Rules that would duplicate
+  the formatter are deliberately absent — two owners for one rule is how
+  gates start fighting each other. Every module below carries a comment
+  naming the defect class it rejects.
+
+  The complexity/size ladder mirrors the PMD design-category overrides in
+  pmd/pmd.xml; keep the two tables in sync (LANG_SPEC.md "Thresholds").
+-->
+<module name="Checker">
+  <property name="severity" value="error"/>
+  <property name="fileExtensions" value="java"/>
+
+  <!-- Size ladder: files and lines grow by accretion; hard caps force
+       decomposition instead of negotiation. -->
+  <module name="FileLength">
+    <property name="max" value="300"/>
+  </module>
+  <module name="LineLength">
+    <property name="max" value="100"/>
+  </module>
+
+  <!-- Printing to stdout/stderr is banned: agents debug-print, forget, and
+       ship it. Values belong in return types or logs. -->
+  <module name="RegexpSingleline">
+    <property name="format" value="\bSystem\.out\.print(ln|f)?\("/>
+    <property name="message" value="System.out printing is banned; return values or use a logger"/>
+    <property name="fileExtensions" value="java"/>
+  </module>
+  <module name="RegexpSingleline">
+    <property name="format" value="\bSystem\.err\.print(ln|f)?\("/>
+    <property name="message" value="System.err printing is banned; return values or use a logger"/>
+    <property name="fileExtensions" value="java"/>
+  </module>
+
+  <module name="TreeWalker">
+    <!-- ==== Structure ================================================= -->
+    <!-- One public type per file keeps diffs greppable and imports honest.
+         (OuterTypeFilename was considered but removed from Checkstyle 14;
+         file/type agreement is formatter+review territory now.) -->
+    <module name="OneTopLevelClass"/>
+    <!-- Utility classes without state must not be instantiable. -->
+    <module name="HideUtilityClassConstructor"/>
+    <module name="ModifierOrder"/>
+    <!-- Redundant modifiers (public on interface members, final on record
+         components' accessors) are noise. -->
+    <module name="RedundantModifier"/>
+
+    <!-- ==== Size / complexity ladder (mirrors PMD design overrides) === -->
+    <module name="MethodLength">
+      <property name="max" value="60"/>
+    </module>
+    <module name="ParameterNumber">
+      <property name="max" value="5"/>
+    </module>
+    <module name="CyclomaticComplexity">
+      <property name="max" value="10"/>
+    </module>
+    <!-- Checkstyle 14 split NestedBlockDepth into per-statement depth caps:
+         same intent, sharper signal. -->
+    <module name="NestedIfDepth">
+      <property name="max" value="4"/>
+    </module>
+    <module name="NestedForDepth">
+      <property name="max" value="2"/>
+    </module>
+    <module name="NestedTryDepth">
+      <property name="max" value="2"/>
+    </module>
+
+    <!-- ==== Imports =================================================== -->
+    <module name="AvoidStarImport"/>
+    <module name="UnusedImports"/>
+    <module name="RedundantImport"/>
+    <module name="IllegalImport"/>
+
+    <!-- ==== Magic numbers =============================================
+         -1/0/1/2 are structural, not semantic. Field declarations with an
+         initializer are ignored: named constants are declared exactly
+         there. -->
+    <module name="MagicNumber">
+      <property name="ignoreNumbers" value="-1, 0, 1, 2"/>
+      <property name="ignoreHashCodeMethod" value="true"/>
+      <property name="ignoreFieldDeclaration" value="true"/>
+    </module>
+
+    <!-- ==== Encapsulation ============================================= -->
+    <!-- Fields must be private (or final package-visible records/enums);
+         exposed mutable state is a boundary breach inside one class. -->
+    <module name="VisibilityModifier"/>
+
+    <!-- ==== Comments ================================================== -->
+    <!-- Any TODO/FIXME must survive review as tracked work, not sediment.
+         Fires on every occurrence; there is no allowlist. (Replaces the
+         TodoComment module removed in Checkstyle 14.) -->
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="(TODO|FIXME)"/>
+      <property name="message" value="untracked work sediment; resolve it or move it to the tracker"/>
+    </module>
+
+    <!-- ==== Defect-prone constructs =================================== -->
+    <module name="EqualsHashCode"/>
+    <module name="StringLiteralEquality"/>
+    <module name="DefaultComesLast"/>
+    <module name="FallThrough"/>
+    <module name="EmptyCatchBlock">
+      <property name="exceptionVariableName" value="expected|ignore|ignored"/>
+    </module>
+    <module name="OneStatementPerLine"/>
+
+    <!-- ==== Naming ==================================================== -->
+    <module name="TypeName"/>
+    <module name="RecordComponentName">
+      <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+    </module>
+    <module name="MethodName"/>
+    <module name="MemberName"/>
+    <module name="ParameterName"/>
+    <module name="LocalVariableName"/>
+    <module name="ConstantName"/>
+    <module name="PackageName"/>
+
+    <!-- ==== Documentation presence ====================================
+         Every public type and member carries Javadoc. Records' implicit
+         component accessors are not flagged; explicit code is. Tests are
+         outside checkstyle's scan (see header note). -->
+    <module name="MissingJavadocType">
+      <property name="scope" value="public"/>
+    </module>
+    <module name="MissingJavadocMethod">
+      <property name="scope" value="public"/>
+      <property name="allowMissingPropertyJavadoc" value="true"/>
+    </module>
+  </module>
+</module>

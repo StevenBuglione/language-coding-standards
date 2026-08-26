@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Canonical warehouse-order domain under maximal Java gates.
+
+  Maven is chosen over Gradle deliberately: POMs are declarative XML, so an
+  agent cannot smuggle imperative logic (arbitrary code in a build script,
+  conditional gate-skipping, environment sniffing) into the build the way it
+  can into build.gradle.kts. Every plugin is pinned via pluginManagement and
+  every version lives in a property, so tool drift is visible in diffs.
+  Full rationale: LANG_SPEC.md ("Why Maven over Gradle").
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.warehouse</groupId>
+  <artifactId>warehouse</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>warehouse</name>
+  <description>Canonical warehouse-order domain under maximal Java gates.</description>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.release>25</maven.compiler.release>
+
+    <!-- ==== Runtime / test dependencies ================================= -->
+    <jspecify.version>1.0.1</jspecify.version>
+    <junit-bom.version>5.14.4</junit-bom.version>
+    <assertj.version>3.27.7</assertj.version>
+    <mockito.version>5.23.0</mockito.version>
+    <archunit.version>1.5.0</archunit.version>
+
+    <!-- ==== Analysis toolchain (annotation processors) ================== -->
+    <error-prone.version>2.50.0</error-prone.version>
+    <nullaway.version>0.14.0</nullaway.version>
+
+    <!-- ==== Build plugins =============================================== -->
+    <spotless-maven-plugin.version>3.10.0</spotless-maven-plugin.version>
+    <google-java-format.version>1.36.1</google-java-format.version>
+    <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+    <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+    <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+    <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+    <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+    <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+    <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+    <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+    <maven-site-plugin.version>3.22.0</maven-site-plugin.version>
+    <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+    <checkstyle.version>14.0.0</checkstyle.version>
+    <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <pmd.version>7.26.0</pmd.version>
+    <spotbugs-maven-plugin.version>4.10.4.0</spotbugs-maven-plugin.version>
+    <findsecbugs.version>1.14.0</findsecbugs.version>
+    <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+    <pitest-maven.version>1.25.9</pitest-maven.version>
+    <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
+
+    <!-- ==== R3 coverage floors ==========================================
+      Measured first-green baseline (JaCoCo bundle): LINE 99.17% (119/120),
+      BRANCH 100.00% (32/32). Floor = measured - 4 points (min 80 / min 70):
+      LINE 0.95, BRANCH 0.96. Never lowered by hand; raise whenever a
+      measurement shows headroom. See LANG_SPEC.md "Thresholds". -->
+    <jacoco.line.floor>0.95</jacoco.line.floor>
+    <jacoco.branch.floor>0.96</jacoco.branch.floor>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- JUnit5 BOM: single alignment point for the whole Jupiter stack. -->
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- Nullability model: JSpecify annotations + NullAway errors at compile
+         time. @NullMarked package-infos make every package non-null by
+         default; NullAway (types phase) enforces it as compile errors. -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>${jspecify.version}</version>
+    </dependency>
+
+    <!-- ==== Test ======================================================== -->
+    <!-- Declared artifact-by-artifact (not the aggregate junit-jupiter) so
+         dependency:analyze reports stay clean: each declared artifact is
+         directly used or explicitly justified below. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Engine is never referenced from bytecode, only loaded by the platform;
+         the unused-declared warning it produces is ignored in
+         dependency:analyze-only with this exact justification. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>${mockito.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <version>${mockito.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- ArchUnit split into its artifacts so analyze stays clean: `archunit`
+         carries the rule DSL used directly, api the annotations, engine runs
+         them on the platform (runtime-only -> justified ignore entry). -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5-api</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5-engine</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>${maven-clean-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>${maven-resources-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+          <configuration>
+            <release>25</release>
+            <!-- Principle 1: no warning survives as a warning.
+                 -XDcompilePolicy=simple is required for Error Prone to run
+                 reliably across annotation-processing rounds.
+                 -Xlint:all,-processing: every javac lint except the noise of
+                 processing itself (processor warnings are EP's job).
+                 The single -Xplugin argument chains Error Prone and NullAway;
+                 the add-exports/add-opens switches they need live in
+                 .mvn/jvm.config so they apply to the Maven JVM that hosts the
+                 in-process javac. -->
+            <compilerArgs>
+              <arg>--should-stop=ifError=FLOW</arg>
+              <arg>-XDcompilePolicy=simple</arg>
+              <arg>-Xlint:all,-processing</arg>
+              <arg>-Werror</arg>
+              <arg>-Xplugin:ErrorProne -Xplugin:NullAway -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:OnlyNullMarked=true</arg>
+            </compilerArgs>
+            <annotationProcessorPaths>
+              <path>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_core</artifactId>
+                <version>${error-prone.version}</version>
+              </path>
+              <path>
+                <groupId>com.uber.nullaway</groupId>
+                <artifactId>nullaway</artifactId>
+                <version>${nullaway.version}</version>
+              </path>
+            </annotationProcessorPaths>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+          <configuration>
+            <!-- The arch phase runs -Dtest=ArchitectureTest; without this
+                 flag a filtered run with no matches in some module would be
+                 reported as failure instead of skip. -->
+            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven-jar-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>${maven-install-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>${maven-deploy-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>${maven-dependency-plugin.version}</version>
+          <configuration>
+            <!-- deadcode/deps-hygiene gates: ANY new warning fails the build.
+                 The only tolerated warnings are the two runtime-only engines
+                 below; they are loaded by their platforms via reflection and
+                 can never appear in bytecode analysis. -->
+            <failOnWarning>true</failOnWarning>
+            <ignoredUnusedDeclaredDependencies>
+              <!-- Test engine loaded by JUnit Platform at runtime. -->
+              <ignoredUnusedDeclaredDependency>org.junit.jupiter:junit-jupiter-engine</ignoredUnusedDeclaredDependency>
+              <!-- ArchUnit engine loaded by the JUnit platform at runtime. -->
+              <ignoredUnusedDeclaredDependency>com.tngtech.archunit:archunit-junit5-engine</ignoredUnusedDeclaredDependency>
+            </ignoredUnusedDeclaredDependencies>
+          </configuration>
+        </plugin>
+        <!-- Default lifecycle binding; pinned so requirePluginVersions passes. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-site-plugin</artifactId>
+          <version>${maven-site-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+          <configuration>
+            <rules>
+              <requireJavaVersion>
+                <version>[25,)</version>
+              </requireJavaVersion>
+              <requireMavenVersion>
+                <version>[3.9.9,)</version>
+              </requireMavenVersion>
+              <!-- One version per artifact in the graph: conflicting
+                   transitive versions fail here instead of resolving
+                   silently to whichever won nearest-wins. -->
+              <dependencyConvergence/>
+              <!-- Every invoked plugin must carry an explicit pinned version
+                   (pluginManagement counts). -->
+              <requirePluginVersions/>
+              <!-- No dynamic versions (LATEST, RELEASE, ranges): pins only. -->
+              <banDynamicVersions/>
+              <!-- Active-but-empty denylist hook: new third-party deps must
+                   be added consciously here if they ever need banning. -->
+              <bannedDependencies>
+                <excludes/>
+              </bannedDependencies>
+            </rules>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>${spotless-maven-plugin.version}</version>
+          <configuration>
+            <java>
+              <includes>
+                <include>src/main/java/**/*.java</include>
+                <include>src/test/java/**/*.java</include>
+              </includes>
+              <googleJavaFormat>
+                <version>${google-java-format.version}</version>
+                <style>GOOGLE</style>
+              </googleJavaFormat>
+            </java>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>${maven-checkstyle-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>${checkstyle.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <configLocation>checkstyle/checkstyle.xml</configLocation>
+            <consoleOutput>true</consoleOutput>
+            <failOnViolation>true</failOnViolation>
+            <!-- Layout rules are delegated to google-java-format (format
+                 phase); checkstyle owns structure, naming, size and import
+                 hygiene. Tests are covered by GJF/Error Prone/NullAway but
+                 not checkstyle (see LANG_SPEC.md). -->
+            <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-pmd-plugin</artifactId>
+          <version>${maven-pmd-plugin.version}</version>
+          <dependencies>
+            <!-- Override BOTH core and language module together: mixing the
+                 plugin's bundled core with a newer pmd-java breaks at runtime
+                 with NoSuchMethodError. -->
+            <dependency>
+              <groupId>net.sourceforge.pmd</groupId>
+              <artifactId>pmd-core</artifactId>
+              <version>${pmd.version}</version>
+            </dependency>
+            <dependency>
+              <groupId>net.sourceforge.pmd</groupId>
+              <artifactId>pmd-java</artifactId>
+              <version>${pmd.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <rulesets>
+              <ruleset>pmd/pmd.xml</ruleset>
+            </rulesets>
+            <targetJdk>25</targetJdk>
+            <failOnViolation>true</failOnViolation>
+            <includeTests>false</includeTests>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs-maven-plugin.version}</version>
+          <configuration>
+            <effort>Max</effort>
+            <threshold>Low</threshold>
+            <excludeFilterFile>spotbugs/exclude.xml</excludeFilterFile>
+            <!-- findsecbugs turns SpotBugs into the SAST gate (security
+                 phase): hardcoded credentials, crypto misuse, taint patterns
+                 all report stable bug-pattern IDs. -->
+            <plugins>
+              <plugin>
+                <groupId>com.h3xstream.findsecbugs</groupId>
+                <artifactId>findsecbugs-plugin</artifactId>
+                <version>${findsecbugs.version}</version>
+              </plugin>
+            </plugins>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco-maven-plugin.version}</version>
+        </plugin>
+        <!-- Mutation testing: CONFIGURED BUT UNSCHEDULED (roadmap R-ladder).
+             pitest never runs in PR CI; the nightly full tier may invoke it
+             via verify.sh mutation (VERIFY_TIER=full). mutationThreshold is
+             the documented floor once scheduled. -->
+        <plugin>
+          <groupId>org.pitest</groupId>
+          <artifactId>pitest-maven</artifactId>
+          <version>${pitest-maven.version}</version>
+          <configuration>
+            <targetClasses>
+              <param>com.warehouse.*</param>
+            </targetClasses>
+            <targetTests>
+              <param>com.warehouse.*Test</param>
+            </targetTests>
+            <mutationThreshold>70</mutationThreshold>
+            <timestampedReports>false</timestampedReports>
+          </configuration>
+          <dependencies>
+            <dependency>
+              <groupId>org.pitest</groupId>
+              <artifactId>pitest-junit5-plugin</artifactId>
+              <version>${pitest-junit5-plugin.version}</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-build-contract</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>spotless-check</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>coverage-report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>coverage-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${jacoco.line.floor}</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${jacoco.branch.floor}</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

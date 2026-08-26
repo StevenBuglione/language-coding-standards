@@ -1,0 +1,12 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["after 6am and before 10am every monday"],
+  "prHourlyLimit": 2,
+  "rangeStrategy": "pin",
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "ignorePaths": ["**/bad_examples/**", "**/node_modules/**"],
+  "labels": ["dependencies"]
+}

@@ -82,9 +82,18 @@ run_security() {
   # locked pin set instead: exported fresh from uv.lock (--no-emit-project
   # drops only the local root), audited with --strict --no-deps so every
   # third-party package in the environment must resolve cleanly or fail.
+  #
+  # errexit is suspended inside gate()'s `|| rc=$?` capture, so EVERY
+  # fallible step here must fail explicitly: a failed export returns 1
+  # instead of falling through to auditing a stale requirements file, and
+  # the file is removed upfront so no prior run can leave one behind.
   local reqs=".cache/pip-audit-requirements.txt"
+  rm -f "${reqs}"
   mkdir -p .cache
-  uv export --locked --no-emit-project --format requirements-txt -o "${reqs}"
+  if ! uv export --locked --no-emit-project --format requirements-txt -o "${reqs}"; then
+    printf 'dependency export failed; cannot audit fresh pins\n' >&2
+    return 1
+  fi
   uv run pip-audit --strict --no-deps -r "${reqs}"
 }
 

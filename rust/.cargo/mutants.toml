@@ -1,0 +1,15 @@
+# cargo-mutants configuration (https://mutants.rs/). Read by `cargo mutants`
+# during the optional nightly-tier mutation phase; never invoked by the
+# default eleven gates. See LANG_SPEC.md for the runtime-economics analysis
+# and the UNSCHEDULED roadmap decision.
+#
+# Keys verified against cargo-mutants v27.x config schema.
+
+# Mutate production code only: tests exist to kill mutants, not to host them,
+# and bad_examples/ is deliberately broken already.
+exclude_globs = ["**/tests/**", "bad_examples/**"]
+
+# Every mutant must fail within a bounded multiple of the clean-suite time so
+# an un-killed mutant can never hang the nightly tier.
+timeout_multiplier = 5.0
+minimum_test_timeout = 20.0

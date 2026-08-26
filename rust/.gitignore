@@ -1,0 +1,9 @@
+# Build artifacts and tool caches: workspace-relative per CONTRACTS §4,
+# never leaked outside /workspace, never committed.
+/target/
+/.cargo-home/
+/.cache/
+/bad_examples/.target/
+
+# cargo-mutants output directories (nightly full tier).
+mutants.out*/

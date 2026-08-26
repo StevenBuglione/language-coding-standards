@@ -1,0 +1,42 @@
+# cargo-deny configuration. Book: https://embarkstudios.github.io/cargo-deny/
+# The security phase runs: cargo deny check advisories bans licenses sources
+
+[graph]
+# Scope every check to the triple this template actually builds on (the
+# container is linux/amd64). Without this, cross-platform-only packages
+# would be pulled into the multiple-versions ban even though no Linux build
+# ever compiles them.
+targets = [{ triple = "x86_64-unknown-linux-gnu" }]
+
+[advisories]
+version = 2
+# A yanked release may not enter the graph, period: yanking is the
+# ecosystem's emergency brake and the lockfile must respect it.
+yanked = "deny"
+# Advisory DB cache stays inside the workspace (CONTRACTS.md §4).
+db-path = "./.cache/cargo-deny/advisory-db"
+
+[licenses]
+version = 2
+# Minimal permissive allowlist: exactly what the current dependency tree
+# uses. cargo-deny fails the gate on UNUSED allowances too
+# (license-not-encountered), so every future addition is a deliberate,
+# reviewed change — copyleft (GPL/AGPL/SSPL) is refused by omission.
+allow = [
+  "Apache-2.0",
+  "MIT",
+  "Unicode-3.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+# Two versions of one crate in the graph is where dependency hell starts;
+# deny forces deduplication (or an explicit, reviewed skip entry) the day it
+# appears.
+multiple-versions = "deny"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,7 @@
+# nextest configuration: https://nexte.st/docs/configuration/
+#
+# Flakes are failures, not retries. nextest's default is already retries = 0;
+# stating it here makes the policy mechanical and reviewable — loosening it
+# requires editing a committed file, not remembering a flag.
+[profile.default]
+retries = 0

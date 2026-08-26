@@ -1,0 +1,16 @@
+# Clippy configuration reference:
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# Mirrors [workspace.package] rust-version: lints that consult the MSRV
+# (e.g. as_conversions advice) reason about the oldest supported compiler,
+# not the pinned one.
+msrv = "1.85"
+
+# Complexity ceilings. The originally planned cognitive-complexity knob is
+# INERT on current clippy (the lint no longer emits; its own documentation
+# disclaims it as a measurement tool), so the ceiling that ships is a hard
+# function-length limit enforced through clippy::too_many_lines — see
+# LANG_SPEC.md for the documented deviation and the fixture proving it bites.
+too-many-lines-threshold = 30
+too-many-arguments-threshold = 5
+large-error-threshold = 128

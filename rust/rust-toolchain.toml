@@ -1,0 +1,10 @@
+# Exact stable-channel pin: the compiler version IS part of the supply-chain
+# contract. Bump this file and the Docker image tag (`rust:<pin>-bookworm`)
+# together — when both name the same exact patch release, rustup resolves to
+# the image's preinstalled toolchain and never downloads anything.
+# Components are deliberately NOT listed here: entries make every cargo
+# invocation lazily download them, hiding real work inside unrelated
+# commands. The deps phase installs rustfmt/clippy/llvm-tools-preview
+# explicitly (the official image's toolchain is minimal).
+[toolchain]
+channel = "1.98.0"

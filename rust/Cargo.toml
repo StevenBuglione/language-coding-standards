@@ -1,0 +1,81 @@
+# Workspace root: virtual manifest, one crate per architectural layer.
+#
+# The workspace IS the architecture boundary (LANG_SPEC.md "Crate layering"):
+# `crates/domain` depends on nothing but `thiserror`; `crates/application`
+# depends on domain; `crates/adapters` closes the dependency direction
+# inward. `bad_examples/` is excluded so the negative fixtures are invisible
+# to every workspace-scoped command by construction (CONTRACTS.md §3).
+[workspace]
+resolver = "3"
+members = ["crates/domain", "crates/application", "crates/adapters"]
+exclude = ["bad_examples"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# MSRV below the toolchain pin on purpose: library consumers of this
+# template may build with any compiler that supports edition 2024 (1.85+).
+# The exact pin lives in rust-toolchain.toml; clippy.toml mirrors this MSRV.
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+
+[workspace.dependencies]
+# The single deliberate runtime dependency of the whole workspace:
+# thiserror generates Display/Error impls for the typed domain errors.
+# Everything else is std; proptest below is a dev-only dependency.
+thiserror = "2.0.20"
+proptest = "1.11.0"
+
+# Intra-workspace crates, declared once so members inherit identical paths.
+# Explicit exact versions keep the dependency graph free of wildcard
+# requirements (deny.toml bans them) even under workspace inheritance.
+warehouse-domain = { path = "crates/domain", version = "=0.1.0" }
+warehouse-application = { path = "crates/application", version = "=0.1.0" }
+warehouse-adapters = { path = "crates/adapters", version = "=0.1.0" }
+
+# Lints are declared ONCE here and inherited by every member via
+# `[lints] workspace = true` — no per-crate drift, one review point.
+# Warn-level entries are still fatal: the lint phase runs with warnings
+# denied (verify.sh run_lint), so "warn" means "must be zero", not
+# "should be rare".
+# Group entries carry priority -1 so sibling individual lints are never
+# shadowed by group ordering (Cargo ignores table order; the
+# lint_groups_priority warning fires otherwise).
+[workspace.lints.rust]
+unsafe_code = { level = "forbid" }
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+# The idioms GROUP is still named rust_2018_idioms on stable (there is no
+# rust_2024_idioms group as of 1.98; edition-2024 migration lints fire
+# automatically per-edition instead).
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+# Group entries carry priority -1 so the individual denies below override
+# them regardless of table order (Cargo ignores ordering within the table;
+# clippy::lint_groups_priority warns about exactly this).
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Promoted denies: restriction-lint class plus the pedantic doc pair.
+# missing_errors_doc/missing_panics_doc stay listed explicitly even though
+# `-D warnings` would elevate them anyway — naming them documents intent
+# and keeps them denied even if someone relaxes the phase flags.
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+# Function-size ceiling (threshold in clippy.toml). Replaces the planned
+# cognitive_complexity knob, which no longer emits on current clippy — see
+# clippy.toml and LANG_SPEC.md.
+too_many_lines = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+indexing_slicing = "deny"
+as_conversions = "deny"
+allow_attributes_without_reason = "deny"

@@ -1,0 +1,5 @@
+# rustfmt stays at stock settings except where stated. Deliberately minimal:
+# nightly-only options (imports_granularity, group_imports) would silently
+# no-op or hard-fail on the stable channel this template pins, so they are a
+# documented roadmap item instead (LANG_SPEC.md).
+max_width = 100

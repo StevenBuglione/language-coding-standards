@@ -37,7 +37,7 @@ declare -a FAILURES=()
 cleanup() {
   rm -f "${ARCH_TMP}"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 expect_failure() {
   local name="$1" signal="$2"

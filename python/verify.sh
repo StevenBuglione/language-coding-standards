@@ -76,6 +76,18 @@ gate() {
   fi
 }
 
+run_security() {
+  # The synced env contains the local project itself, which PyPI cannot
+  # audit; --strict rightly refuses to skip anything. So audit the exact
+  # locked pin set instead: exported fresh from uv.lock (--no-emit-project
+  # drops only the local root), audited with --strict --no-deps so every
+  # third-party package in the environment must resolve cleanly or fail.
+  local reqs=".cache/pip-audit-requirements.txt"
+  mkdir -p .cache
+  uv export --locked --no-emit-project --format requirements-txt -o "${reqs}"
+  uv run pip-audit --strict --no-deps -r "${reqs}"
+}
+
 run_mutation() {
   if [[ "${VERIFY_TIER:-}" == "full" ]]; then
     # Nightly tier: run the muters, then require a kill score floor. The score
@@ -124,17 +136,9 @@ for phase in "${phases[@]}"; do
     test) gate test uv run pytest tests/unit tests/integration -q ;;
     coverage) CI=true gate coverage uv run pytest tests -q --cov=warehouse --cov-branch --cov-report=term-missing ;;
     deadcode) gate deadcode uv run vulture src vulture_whitelist.py --min-confidence 80 ;;
-    # The synced env contains the local project itself, which PyPI cannot
-    # audit; --strict rightly refuses to skip anything. So audit the exact
-    # locked pin set instead: exported fresh from uv.lock (--no-emit-project
-    # drops only the local root), audited with --strict --no-deps so every
-    # third-party package in the environment must resolve cleanly or fail.
-    security)
-      reqs=".cache/pip-audit-requirements.txt"
-      mkdir -p .cache
-      uv export --locked --no-emit-project --format requirements-txt -o "${reqs}"
-      gate security uv run pip-audit --strict --no-deps -r "${reqs}"
-      ;;
+    # Export AND audit both run inside the gate: a failed uv export must
+    # print "GATE security: FAIL (...)", never die under set -e silently.
+    security) gate security run_security ;;
     deps-hygiene) gate deps-hygiene uv lock --check ;;
     negative) gate negative bash bad_examples/assert.sh ;;
     mutation) run_mutation ;;

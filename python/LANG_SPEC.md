@@ -126,6 +126,10 @@ kill score against `MUTATION_FLOOR` (default 70). It is wired for the nightly
 Every entry here is a decision, recorded so silence cannot be mistaken for
 oversight. The ignore list in `pyproject.toml` mirrors this table.
 
+- **ANN401 stays enforced** — deviating from the canonical ignore list on
+  purpose: no `Any` is used anywhere in this template (tests included), so
+  the rule remains fully active instead of being exempted for fixtures that
+  do not exist. Revisit only if future fixtures legitimately introduce `Any`.
 - **ty (Astral type checker): excluded until stable.** Promising, but still
   pre-1.0 with a moving rule surface (<https://github.com/astral-sh/ty>).
   basedpyright covers the role today; revisit when ty stabilizes.

@@ -99,8 +99,10 @@ ignore = [
     "COM812",
     # ISC001 single-line implicit concatenation conflicts with the formatter.
     "ISC001",
-    # CPY001 copyright notices are a legal/policy decision, not a code-quality
-    # gate; an open template would need per-project boilerplate.
+    # CPY001 copyright notices are a legal/policy decision, not a
+    # code-quality gate; an open template would need per-project boilerplate.
+    # Treat this entry as policy documentation only: it records a deliberate
+    # stance for reviewers, independent of whether the rule fires under ALL.
     "CPY001",
     # EXE002 misfires on Windows bind mounts, which mark every file
     # executable regardless of content; shebangs are not a lint concern here.

@@ -68,6 +68,12 @@ Domain error types: `InsufficientStock`, `InvalidOrder`, `OrderAlreadyShipped`.
 - `PaymentProcessor.charge(Order) -> Result`
 - `OrderRepository.save/get`
 
+Binding clarifications:
+
+- `Result` payloads are named: success carries the persisted `Order`; failure carries exactly one of the three domain error types (`InsufficientStock`, `InvalidOrder`, `OrderAlreadyShipped`).
+- `OrderRepository.get` takes an Order identifier value and returns order-or-absent (Optional/Result semantics stay idiomatic per language); it never throws for an unknown identifier.
+- Money currency mismatch: operations between `Money` values of different currencies raise/return `InvalidOrder` — currency-mismatch is invalid.
+
 ### Application layer
 
 `PlaceOrderUseCase` orchestrating validate → reserve → charge → persist, returning typed success/failure results (no exceptions across the boundary where the language has result types).

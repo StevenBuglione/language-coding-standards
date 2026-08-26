@@ -29,7 +29,7 @@ jobs:
 
       - name: Fail on any CR byte (LF-only policy)
         run: |
-          offenders="$(git grep -Il $'\r' -- . || true)"
+          offenders="$(git grep --cached -Il $'\r' -- . || true)"
           if [ -n "$offenders" ]; then
             echo "::error::CR bytes found in tracked files; LF-only policy violated:"
             echo "$offenders"
@@ -94,7 +94,7 @@ jobs:
               echo "::error::uses: ref is neither 'actions/<name>@v<n>' nor local ('./...'): '${u}'"
               rc=1
             fi
-          done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]*([^[:space:]#]+).*$/\1/p' .github/workflows/*.yml)
+          done < <(sed -nE 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([^[:space:]#]+).*$/\2/p' .github/workflows/*.yml .github/workflows/*.yaml)
           if [ "$rc" -eq 0 ]; then
             echo "All uses: refs comply with the pinning policy."
           fi

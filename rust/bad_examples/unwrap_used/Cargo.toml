@@ -1,0 +1,9 @@
+# Standalone fixture workspace: excluded from the template's workspace by
+# construction (root Cargo.toml exclude + this [workspace] table), std-only
+# so every probe runs --offline.
+[workspace]
+
+[package]
+name = "bad-unwrap_used"
+version = "0.0.0"
+edition = "2024"

@@ -1,0 +1,53 @@
+# Hermetic local runners, one service per language template.
+# Services activate as templates land: each build fails until <lang>/Dockerfile
+# exists — that is expected while the templates arrive incrementally.
+name: language-coding-standards
+
+services:
+  python:
+    build: { context: ./python }
+    volumes: [ './python:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  typescript:
+    build: { context: ./typescript }
+    volumes: [ './typescript:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  go:
+    build: { context: ./go }
+    volumes: [ './go:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  rust:
+    build: { context: ./rust }
+    volumes: [ './rust:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  java:
+    build: { context: ./java }
+    volumes: [ './java:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  csharp:
+    build: { context: ./csharp }
+    volumes: [ './csharp:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  kotlin:
+    build: { context: ./kotlin }
+    volumes: [ './kotlin:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]
+
+  swift:
+    build: { context: ./swift }
+    volumes: [ './swift:/workspace' ]
+    working_dir: /workspace
+    entrypoint: [ 'bash', './verify.sh' ]

@@ -1,0 +1,59 @@
+name: typescript
+
+on:
+  push:
+    paths:
+      - "typescript/**"
+      - ".github/workflows/typescript.yml"
+  pull_request:
+    paths:
+      - "typescript/**"
+      - ".github/workflows/typescript.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # Phase split per docs/CONTRACTS.md §5. node:24-bookworm carries git and
+  # corepack; pnpm itself is pinned via packageManager, every other tool via
+  # the committed lockfile — nothing quality-related baked into any layer.
+  static:
+    name: static gates
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v5
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: deps format lint types arch deadcode
+        run: bash ./verify.sh deps format lint types arch deadcode
+        working-directory: typescript
+
+  test:
+    name: tests and coverage
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v5
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: test coverage
+        run: bash ./verify.sh deps test coverage
+        working-directory: typescript
+
+  supply:
+    name: supply chain
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v5
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: security deps-hygiene negative
+        run: bash ./verify.sh deps security deps-hygiene negative
+        working-directory: typescript

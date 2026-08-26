@@ -7,17 +7,18 @@ tooling globs via native scoping — the eslint global ignore list,
 `.prettierignore`, and tsconfig `include`/`exclude` — never via inline
 suppressions.
 
-| fixture        | gate     | expected signal                                  |
-| -------------- | -------- | ------------------------------------------------ |
-| too_complex    | lint     | `complexity` rule (>15 decision points)        |
-| type_violation | types    | `error TS2322` (tsc)                           |
-| arch_violation | arch     | `domain-no-outbound` rule (dependency-cruiser) |
-| dead_code      | deadcode | unused file `_tmp_dead_code_fixture.ts` (knip) |
-| insecure       | lint     | `forbidden: eval()` message                    |
-| printing       | lint     | `no-console` rule                              |
-| naive_datetime | lint     | `forbidden: new Date()` message                |
-| todo_comment   | lint     | `no-warning-comments` rule                     |
-| unformatted    | format   | `Code style issues found` (prettier --check)   |
+| fixture          | gate     | expected signal                                |
+| ---------------- | -------- | ---------------------------------------------- |
+| too_complex      | lint     | `complexity` rule (>15 decision points)        |
+| type_violation   | types    | `error TS2322` (tsc)                           |
+| arch_violation   | arch     | `domain-no-outbound` rule (dependency-cruiser) |
+| dead_code        | deadcode | unused file `_tmp_dead_code_fixture.ts` (knip) |
+| dead_code_export | deadcode | unused export `_tmpDeadExportProbe` (knip)     |
+| insecure         | lint     | `forbidden: eval()` message                    |
+| printing         | lint     | `no-console` rule                              |
+| naive_datetime   | lint     | `forbidden: new Date()` message                |
+| todo_comment     | lint     | `no-warning-comments` rule                     |
+| unformatted      | format   | `Code style issues found` (prettier --check)   |
 
 Notes:
 
@@ -28,10 +29,13 @@ Notes:
   the anchored layer edges; its import is written relative to that
   destination. `assert.sh` copies it into `src/domain/`, runs the gate, and
   removes it again in a trap.
-- The dead-code fixture is likewise copied into `src/` for one knip run:
-  knip only analyzes files reachable from the configured entry points, so
-  it reports the copy as an unused file — file-level death — rather than
-  an unused export.
+- Dead code is proven on both of knip's layers: the fixture copied into
+  `src/` surfaces as an unused FILE, and a dead export appended to the
+  reachable module `src/domain/sku.ts` surfaces as an unused EXPORT. The
+  export-level probe holds only while `src/index.ts` forwards symbols by
+  explicit name — an `export *` barrel at the entry would exempt every
+  transitively forwarded symbol from knip's analysis. assert.sh backs up
+  sku.ts before appending and restores it in its trap.
 - Prettier has no ignore-bypass flag, so the format probe passes
   `--ignore-path /dev/null` to check the fixture despite `.prettierignore`
   excluding `bad_examples/`.

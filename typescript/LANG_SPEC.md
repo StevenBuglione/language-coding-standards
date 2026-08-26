@@ -153,9 +153,15 @@ uses `crypto.randomUUID`.
 7. **coverage** — `vitest run --coverage` with thresholds enforcing the R3
    floor (see Thresholds). Vacuous tests cannot hold the floor while real
    logic stays untested.
-8. **deadcode** — `knip` over entries `src/index.ts` + `tests/**/*.test.ts`.
-   Fixture: `dead_code/dead_code.ts` — copied into `src/` for one run, knip
-   reports the copy as an unused file (file-level death) and exits nonzero.
+8. **deadcode** — `knip` over entries `src/index.ts` +
+   `tests/**/*.test.ts`, proven on both of its layers by the negative
+   phase: the `dead_code/dead_code.ts` copy surfaces as an unused FILE, and
+   a dead export appended to the reachable module `src/domain/sku.ts`
+   surfaces as an unused EXPORT. The export-level proof holds only because
+   `src/index.ts` forwards every symbol by explicit name — an
+   `export *` barrel at the entry file would be exempt from knip's analysis
+   and could mask dead exports forever, so barrels are banned there by
+   design (see non-enforcements).
 9. **security** — `pnpm audit --prod --audit-level high`. The template ships
    zero runtime dependencies, so the audited set is empty by construction;
    any added runtime dependency enters the audit automatically. See
@@ -245,9 +251,35 @@ not exist anywhere in `src/` or `tests/`.
   are arbitrary precision; JS numbers are not. Amounts beyond
   `Number.MAX_SAFE_INTEGER` raise `InvalidOrder` — an honest adaptation of
   "integer minor units" to the platform.
+- **Currency validation is shape-level, not a live ISO-4217 table.** The
+  `/^[A-Z]{3}$/` pattern accepts any three uppercase letters — including
+  codes that merely look valid and ISO-4217's own `XXX` placeholder ("no
+  currency"). A maintained currency-code table is a data dependency the
+  domain does not need for this harness; tighten it only if a project
+  actually settles in ambiguous codes.
 - **Order status getter is named `state`.** A public `status` accessor cannot
   coexist with the private `status` field in one class; the state-machine
   semantics are unchanged.
+- **`src/index.ts` bans `export *` barrels by design** (not a lint rule; a
+  reviewed convention stated here and enforced by review). knip exempts the
+  entry file's own exports, so a wildcard barrel would forward any future
+  dead export sight unseen and the unused-export probe could never fire.
+  Every re-export is explicit; adding a symbol to the public surface is a
+  one-line, reviewable act.
+- **no-orphans excludes `src/application/ports.ts`.** It is a pure type-only
+  contract module, and dependency-cruiser does not record `import type`
+  edges, so it can never show an incoming dependency — flagging it would be
+  a permanent false positive (this surfaced when the entry moved from
+  wildcard barrels to explicit named re-exports). Extend the exclusion list
+  in `.dependency-cruiser.cjs` only for other genuinely type-only files;
+  runtime code must never hide behind it.
+- **package.json scripts mirror the phases; verify.sh stays canonical.**
+  Every phase has a same-named script (`deps`, `format`, ..., `negative`,
+  plus `mutation`) for direct developer invocation, but verify.sh remains
+  the sole gate entrypoint: only it sets up corepack unconditionally,
+  enforces canonical ordering, prints the GATE contract lines, and adds the
+  deps-hygiene hash guard (the bare `deps-hygiene` script is just the frozen
+  install).
 - **fast-check replaces hypothesis' CI profile machinery.** No env-conditional
   profile: defaults run identically everywhere; the `CI=true` export the
   Python template uses for hypothesis is dropped because nothing consumes it.

@@ -1,12 +1,25 @@
 /**
  * Thin public surface of the template: re-exports the canonical domain,
  * the ports, the use-case factory, and the in-memory adapters.
+ *
+ * Every re-export is explicit by name — deliberately no `export *`. A
+ * wildcard barrel at the entry would forward any future export sight
+ * unseen, and knip exempts the entry file's own exports, so dead exports
+ * could hide behind it forever. Explicit lists keep the public surface a
+ * reviewed artifact and knip's unused-export analysis sound.
  */
 
-export * from "./adapters/inventory";
-export * from "./adapters/payments";
-export * from "./adapters/repository";
-export * from "./application/ports";
+export { InMemoryInventoryGateway } from "./adapters/inventory";
+export { FakePaymentProcessor } from "./adapters/payments";
+export type { FakePaymentProcessorOptions } from "./adapters/payments";
+export { InMemoryOrderRepository } from "./adapters/repository";
+export type {
+  ChargeResult,
+  InventoryGateway,
+  OrderRepository,
+  PaymentProcessor,
+  ReserveResult,
+} from "./application/ports";
 export { createPlaceOrderUseCase, PlaceOrderUseCase } from "./application/place-order";
 export type {
   PlaceOrderFailure,

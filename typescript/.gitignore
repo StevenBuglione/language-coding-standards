@@ -11,3 +11,8 @@ dist/
 # Mutation testing artifacts.
 .stryker-tmp/
 stryker-incremental.json
+
+# Deliberately NOT ignoring crash leftovers from an interrupted negative
+# phase (src/_tmp_*_fixture.ts): knip respects .gitignore, and ignoring
+# them would blind the dead-code probes that copy files into src/.
+# assert.sh's trap is the cleanup mechanism instead.

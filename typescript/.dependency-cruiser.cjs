@@ -36,8 +36,15 @@ module.exports = {
     {
       name: "no-orphans",
       severity: "error",
+      // ports.ts is excluded deliberately: it is a pure type-only contract
+      // module, and dependency-cruiser does not record `import type` edges,
+      // so it can never show incoming dependencies. Extend this list only
+      // for other genuinely type-only files (see LANG_SPEC.md).
       comment: "every src module is reachable from the public entry or used by tests",
-      from: { orphan: true, pathNot: String.raw`\.d\.ts$` },
+      from: {
+        orphan: true,
+        pathNot: [String.raw`\.d\.ts$`, String.raw`^src/application/ports\.ts$`],
+      },
       to: {},
     },
   ],

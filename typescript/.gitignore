@@ -1,0 +1,13 @@
+# Dependencies (installed fresh from the lockfile on every run).
+node_modules/
+
+# Tool caches and outputs — workspace-relative, never committed.
+.pnpm-store/
+.cache/
+coverage/
+dist/
+*.tsbuildinfo
+
+# Mutation testing artifacts.
+.stryker-tmp/
+stryker-incremental.json

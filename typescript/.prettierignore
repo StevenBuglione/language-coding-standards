@@ -1,0 +1,15 @@
+# The lockfile is owned by pnpm; formatter churn there would break the
+# deps-hygiene byte-for-byte guard.
+pnpm-lock.yaml
+
+# Tool caches and outputs.
+node_modules/
+.pnpm-store/
+.cache/
+coverage/
+dist/
+.stryker-tmp/
+
+# Negative fixtures are deliberately broken/misformatted and are checked
+# only by the negative phase with explicit paths (CONTRACTS.md §3).
+bad_examples/

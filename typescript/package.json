@@ -1,0 +1,40 @@
+{
+  "name": "warehouse-orders",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reference template: maximally strict CI gates around the canonical warehouse-order domain.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "format": "prettier --check .",
+    "lint": "eslint . --report-unused-disable-directives",
+    "types": "tsc --noEmit",
+    "arch": "depcruise src",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "deadcode": "knip",
+    "security": "pnpm audit --prod --audit-level high",
+    "mutation": "stryker run"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.11",
+    "dependency-cruiser": "18.2.0",
+    "eslint": "10.9.1",
+    "eslint-plugin-sonarjs": "4.2.0",
+    "eslint-plugin-unicorn": "73.0.0",
+    "fast-check": "4.9.0",
+    "knip": "6.32.2",
+    "prettier": "3.9.6",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}

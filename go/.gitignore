@@ -1,0 +1,13 @@
+# Tool caches and installed binaries: workspace-relative per CONTRACTS §4,
+# never leaked outside the workspace, never committed.
+.gocache/
+.gomodcache/
+.gopath/
+.golangci-cache/
+.cache/
+
+# Coverage profile written by the coverage phase.
+cover.out
+
+# Local build output.
+bin/

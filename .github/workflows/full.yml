@@ -1,0 +1,29 @@
+name: full
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Planned nightly full tiers (land as templates arrive):
+#   - mutation testing floors (python and typescript first): the optional
+#     `mutation` phase of verify.sh, which runs ONLY here — never in the
+#     default phase set.
+#   - slow audits: deep dependency review, license scans, long-running
+#     security passes that are too slow for pull-request CI.
+#   - integration suites beyond the unit/property tier.
+
+jobs:
+  placeholder:
+    name: placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder for the nightly full tier
+        run: echo "nightly full tier lands as templates arrive"

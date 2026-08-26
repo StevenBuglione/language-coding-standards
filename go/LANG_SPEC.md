@@ -126,7 +126,7 @@ laptop cache.
    | --- | --- | --- |
    | domain | stdlib | application, adapters |
    | application | stdlib, domain | adapters |
-   | adapters | stdlib, application, domain | sibling adapter packages |
+   | adapters | stdlib, application, domain | — (one package; split into subpackages before a peer rule is needed) |
 
    Go additionally enforces the strongest boundary natively: `internal/`
    packages are importable only within their module, so foreign modules fail
@@ -158,7 +158,9 @@ laptop cache.
    lint (G101 hardcoded credentials proven by fixture).
 10. **deps-hygiene** — `go mod tidy -diff && go mod verify`. An edited
     go.mod without regenerated state fails immediately; module cache
-    checksums are verified against the sum database records.
+    checksums are verified against the sum database records. `go.sum` is
+    deliberately absent while the template has zero dependencies: there is
+    nothing to pin yet, and `tidy -diff` fails the day that changes.
 11. **negative** — `bash bad_examples/assert.sh` runs all nine fixtures
     through their gates scoped to the fixture package, asserting nonzero exit
     plus the expected stable signal. Text output colors are disabled in the
@@ -204,6 +206,18 @@ oversight.
   already possess. (mockgen itself was archived by golang in 2023 and lives
   on as the community uber fork — unnecessary here.) No mocking framework
   appears anywhere in this template.
+- **Failure payloads beyond the three named domain errors — CONTRACTS
+  tension called out explicitly.** CONTRACTS §2 says a place-order failure
+  carries exactly one of `InsufficientStock` / `InvalidOrder` /
+  `OrderAlreadyShipped`. This template honors that for every domain-rule
+  outcome: stock shortages wrap InsufficientStock, payment declines map to
+  InvalidOrder (a declined collection is refused by domain rules), illegal
+  transitions wrap InvalidOrder or OrderAlreadyShipped. But Execute's
+  persist branch wraps whatever the repository returned — an infrastructure
+  fault that is none of the three — rather than mislabeling an outage as an
+  invalid order. Callers recover the three contract errors with errors.As;
+  anything else surfacing from PlaceOrderResult.Failure is, by construction,
+  not a domain verdict.
 - **maintidx, gocyclo: skipped** — duplicate lenses over the same code with
   cyclop+gocognit already enforcing structure; three complexity tools buy
   noise, not safety. **NilAway: not bundleable** as a golangci plugin in the
@@ -260,8 +274,9 @@ oversight.
    without the other removes the proof that your gates bite.
 4. Bump the tool versions together in `verify.sh` (`GOLANGCI_LINT_VERSION`,
    `DEADCODE_VERSION`, `GOVULNCHECK_VERSION`).
-5. Re-measure coverage after your first green run and reset
-   `COVERAGE_FLOOR` per the R3 rule; record the baseline in Thresholds.
+5. Re-measure coverage after your first green run and reset the floor
+   constant (`local floor=...` in verify.sh's run_coverage) per the R3
+   rule; record the baseline in Thresholds.
 
 ### Hermetic run
 

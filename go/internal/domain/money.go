@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 )
 
@@ -58,6 +59,16 @@ func (m Money) Times(multiplier int64) (Money, error) {
 		return Money{}, fmt.Errorf(
 			"times money: %w",
 			InvalidOrder{Reason: fmt.Sprintf("multiplier must be non-negative, got %d", multiplier)},
+		)
+	}
+	// Precondition before multiplying: unlike Add, whose sum wraps into the
+	// negative range and is therefore always caught by NewMoney's
+	// non-negative check, a wrapping product can land back in positive
+	// territory and masquerade as valid money.
+	if multiplier != 0 && m.MinorUnits > math.MaxInt64/multiplier {
+		return Money{}, fmt.Errorf(
+			"times money: %w",
+			InvalidOrder{Reason: fmt.Sprintf("scaling overflows int64 minor units: %d * %d", m.MinorUnits, multiplier)},
 		)
 	}
 	scaled, err := NewMoney(m.MinorUnits*multiplier, m.Currency)

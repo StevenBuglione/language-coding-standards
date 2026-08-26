@@ -205,6 +205,9 @@ func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
 
 	maxMoney := domain.MustMoney(9223372036854775807, "USD")
 	oneCent := domain.MustMoney(1, "USD")
+	// 2^62 scaled by 5 wraps mod 2^64 back to exactly 2^62: a POSITIVE value
+	// that would pass the non-negative check and masquerade as valid money.
+	wrapsBackPositive := domain.MustMoney(4611686018427387904, "USD")
 
 	t.Run("addition overflow is invalid", func(t *testing.T) {
 		t.Parallel()
@@ -218,7 +221,7 @@ func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
 		}
 	})
 
-	t.Run("scaling overflow is invalid", func(t *testing.T) {
+	t.Run("scaling into negative range is invalid", func(t *testing.T) {
 		t.Parallel()
 		got, err := maxMoney.Times(2)
 		if err == nil {
@@ -227,6 +230,18 @@ func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
 		var invalid domain.InvalidOrder
 		if !errors.As(err, &invalid) {
 			t.Fatalf("Times overflow error = %v, want wrapped domain.InvalidOrder", err)
+		}
+	})
+
+	t.Run("scaling that wraps back positive is invalid", func(t *testing.T) {
+		t.Parallel()
+		got, err := wrapsBackPositive.Times(5)
+		if err == nil {
+			t.Fatalf("Times(2^62 * 5) = %+v, want error; wrapped product passed as valid money", got)
+		}
+		var invalid domain.InvalidOrder
+		if !errors.As(err, &invalid) {
+			t.Fatalf("Times wrap-back-positive error = %v, want wrapped domain.InvalidOrder", err)
 		}
 	})
 }

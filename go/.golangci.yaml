@@ -87,6 +87,10 @@ linters:
       #
       #   adapters -> application -> domain
       #
+      # Adapters are ONE package (inventory.go, payments.go, repository.go,
+      # clock.go), so there is no sibling-adapter rule to enforce; if you
+      # split them into subpackages later, add a peer-denial rule here.
+      #
       # Patterns are relative to the directory verify.sh runs from (the
       # module root); the doubled globs keep the rule working regardless of
       # how the tool presents paths.
@@ -107,17 +111,6 @@ linters:
           deny:
             - pkg: warehouse/internal/adapters
               desc: application depends on ports, never on adapter implementations
-        adapters-stay-independent:
-          files:
-            - "**/internal/adapters/**"
-            - "internal/adapters/**"
-          deny:
-            - pkg: warehouse/internal/adapters/inventory
-              desc: adapters must not import sibling adapters
-            - pkg: warehouse/internal/adapters/payments
-              desc: adapters must not import sibling adapters
-            - pkg: warehouse/internal/adapters/repository
-              desc: adapters must not import sibling adapters
 
     nolintlint:
       allow-unused: false

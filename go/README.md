@@ -16,7 +16,10 @@ domain, plus `bad_examples/` fixtures that prove every gate bites.
 4. Bump tool pins in one place: `verify.sh` (`GOLANGCI_LINT_VERSION`,
    `DEADCODE_VERSION`, `GOVULNCHECK_VERSION`); the compiler pin is the Docker
    image tag.
-5. Run everything locally, hermetically: `docker compose run --rm go`
+5. Re-measure coverage after your first green run and reset the floor
+   constant in `verify.sh` per the R3 rule; record the baseline in
+   LANG_SPEC.md's thresholds.
+6. Run everything locally, hermetically: `docker compose run --rm go`
    from the repository root. Iterate until every GATE prints PASS.
 
 Tool-by-tool rationale, thresholds, and deliberate non-enforcements live in

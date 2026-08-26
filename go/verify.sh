@@ -104,10 +104,10 @@ run_deps() {
     return 1
   fi
   mkdir -p "${GOPATH}/bin"
-  # Official installer script at an exact version tag -> pinned release
-  # binary into $GOPATH/bin (LANG_SPEC.md documents the supply-chain
-  # tradeoff against `go tool` directives).
-  if ! curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh |
+  # Official installer script fetched at the SAME exact version tag as the
+  # binary it installs -> both script and release are pinned (LANG_SPEC.md
+  # documents the supply-chain tradeoff against `go tool` directives).
+  if ! curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" |
     sh -s -- -b "${GOPATH}/bin" "${GOLANGCI_LINT_VERSION}"; then
     printf 'golangci-lint %s install failed\n' "${GOLANGCI_LINT_VERSION}" >&2
     return 1
@@ -158,9 +158,9 @@ run_coverage() {
   # R3 floor rule: floor = measured total - 4, rounded down, minimum 80.
   # Baseline measured on first green run: 96% of statements across
   # ./internal/... (the remaining 4% are provably-unreachable defensive
-  # branches; see LANG_SPEC.md thresholds). Override via COVERAGE_FLOOR only
-  # when re-measuring deliberately.
-  local floor="${COVERAGE_FLOOR:-92}"
+  # branches; see LANG_SPEC.md thresholds). The floor is a committed
+  # constant, like the tool pins above — change it in review, not per-run.
+  local floor=92
   rm -f cover.out
   # -coverpkg=./internal/... makes every package's test binary instrument the
   # whole internal tree, so the application-level integration test earns

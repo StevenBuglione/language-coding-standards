@@ -188,9 +188,9 @@ Every entry here is a decision, recorded so silence cannot be mistaken for
 oversight.
 
 - **No property-based framework — accepted gap vs hypothesis/fast-check.**
-  Go's ecosystem has no standard property-testing library (go-checkup
-  candidates like gopter are unmaintained; testing/quick cannot generate
-  structured domain values well). Forcing one would violate the
+  Go's ecosystem has no standard property-testing library (the usual
+  candidate, leanovate/gopter, is unmaintained; stdlib testing/quick cannot
+  generate structured domain values well). Forcing one would violate the
   stdlib-only stance this template takes elsewhere. Instead CONTRACTS' two
   required property tests ship as table-driven invariant suites with
   deterministic seeded generation (fixed boundaries × pseudo-random pairs):

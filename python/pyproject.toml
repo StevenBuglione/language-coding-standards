@@ -1,0 +1,207 @@
+# Reference Python template for language-coding-standards.
+#
+# Every quality tool is configured HERE, in one file, and installed from
+# [dependency-groups].dev via `uv sync --locked` (the only install path).
+# Exact versions are pinned by uv.lock; the ranges below are the accepted
+# upgrade windows. See LANG_SPEC.md for the rationale behind every knob.
+
+[project]
+name = "warehouse-orders"
+version = "1.0.0"
+description = "Reference template: maximally strict CI gates around the canonical warehouse-order domain."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    # Format + lint (single fast tool, max-strict rule set).
+    "ruff>=0.16,<0.17",
+    # Types: strictest checker available for Python today.
+    "basedpyright>=1.39",
+    # Architecture: layered / independence / forbidden import contracts.
+    "import-linter>=2.13",
+    # Tests + coverage + property-based testing.
+    "pytest>=9",
+    "pytest-cov>=7",
+    "hypothesis>=6.140",
+    # Dead-code detection with an explicit whitelist file.
+    "vulture>=2.14",
+    # Vulnerability audit of the synced environment.
+    "pip-audit>=2.9",
+    # Mutation testing: config only; runs in the nightly full tier.
+    "mutmut>=3.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/warehouse"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config -ra"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+# Source scope comes solely from verify.sh's `--cov=warehouse` flag; also
+# declaring source_pkgs here makes coverage resolve the package by importing
+# it before measurement starts ("module-not-measured" warning).
+
+[tool.coverage.report]
+# Ruling R3: fail_under = measured coverage minus 4, rounded down, floor 85.
+# Baseline measured on first green run: 100.00% branch coverage across all
+# 195 statements / 36 branches -> floor(100 - 4) = 96.
+fail_under = 96
+show_missing = true
+precision = 2
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+preview = true
+# bad_examples stays out of the main gates (the negative phase checks it with
+# explicit paths); the rest are gitignored tool-cache directories that must
+# never enter lint/format discovery.
+extend-exclude = [
+    "bad_examples",
+    ".uv-cache",
+    ".cache",
+    ".hypothesis",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+explicit-preview-rules = true
+# Re-enable opinionated codes ruff removed from ALL; each is a deliberate,
+# documented strictness choice (LANG_SPEC.md non-enforcements table lists none
+# of these as skipped — they are all active).
+extend-select = [
+    "E401", # multiple imports on one line
+    "E402", # module-level import not at top of file
+    "E711", # comparison to None should be `is None`
+    "E712", # comparison to True/False should be `is`
+    "E731", # do not assign a lambda expression
+    "E741", # ambiguous variable name
+    "F403", # `from x import *` used; unable to detect undefined names
+]
+ignore = [
+    # D203 vs D211: we enforce no-blank-line-after-class-docstring (D211).
+    "D203",
+    # D212 vs D213: we enforce summary-on-second-line docstrings (D213).
+    "D212",
+    # COM812 trailing-comma enforcement conflicts with the formatter;
+    # the formatter owns this decision.
+    "COM812",
+    # ISC001 single-line implicit concatenation conflicts with the formatter.
+    "ISC001",
+    # CPY001 copyright notices are a legal/policy decision, not a code-quality
+    # gate; an open template would need per-project boilerplate.
+    "CPY001",
+    # EXE002 misfires on Windows bind mounts, which mark every file
+    # executable regardless of content; shebangs are not a lint concern here.
+    "EXE002",
+    # EM101/EM102/TRY003 form one ergonomic cluster around raise-site
+    # messages. Domain errors here are structured payload classes whose
+    # message documents the failure at the raise site; forcing every message
+    # into a variable (EM101/EM102) or into the class (TRY003) adds noise
+    # without adding safety. See LANG_SPEC.md non-enforcements table.
+    "EM101",
+    "EM102",
+    "TRY003",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-branches = 8
+max-statements = 35
+max-returns = 6
+max-nested-blocks = 4
+max-locals = 10
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.per-file-ignores]
+# The canonical domain error names are fixed by docs/CONTRACTS.md §2
+# (InsufficientStock, OrderAlreadyShipped); N818's Error-suffix convention
+# must not rename contract-mandated types.
+"src/warehouse/domain/errors.py" = ["N818"]
+"tests/**" = [
+    # Assertions are the point of tests.
+    "S101",
+    # Literal expected values in assertions are intentional, not magic.
+    "PLR2004",
+    # Narrative docstrings add noise to test names that already document.
+    "D100",
+    "D103",
+    "D104",
+]
+"vulture_whitelist.py" = [
+    # Whitelist entries are bare attribute references by design; vulture reads
+    # them, every other tool would call them useless expressions.
+    "B018",
+]
+
+[tool.basedpyright]
+# include scopes the main run to production+tests; bad_examples is analyzed
+# only when the negative phase passes a fixture explicitly. Do NOT list
+# bad_examples under exclude: pyright honors exclude even for files named on
+# the command line, which would let the type fixture pass silently.
+include = ["src", "tests"]
+typeCheckingMode = "strict"
+failOnWarnings = true
+# The stdlib ships no type stubs and our zero-dependency runtime needs none;
+# third-party stubs would be a maintenance cost without a payoff here.
+reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"
+
+[tool.importlinter]
+root_package = "warehouse"
+# The canonical snippet says False, but import-linter >=2 rejects external
+# forbidden modules unless this is True; `tests` sits outside the package, so
+# True is required for the production-never-imports-tests contract.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+# import-linter requires `containers` for `exhaustive`; with containers set,
+# layer names are relative to the container. Semantics are exactly the ones
+# the harness specifies: adapters -> application -> domain, every module in
+# the root package assigned to a layer.
+name = "layered architecture"
+type = "layers"
+containers = ["warehouse"]
+layers = [
+    "adapters",
+    "application",
+    "domain",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
+name = "adapters independent of each other"
+type = "independence"
+modules = [
+    "warehouse.adapters.inventory",
+    "warehouse.adapters.payments",
+    "warehouse.adapters.repository",
+]
+
+[[tool.importlinter.contracts]]
+name = "production never imports tests"
+type = "forbidden"
+source_modules = ["warehouse"]
+forbidden_modules = ["tests"]
+
+[tool.mutmut]
+# Mutation testing is configured but unscheduled: it runs only in the nightly
+# full tier (VERIFY_TIER=full), never in pull-request CI. See LANG_SPEC.md.
+paths_to_mutate = ["src"]

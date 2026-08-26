@@ -1,0 +1,14 @@
+[package]
+name = "warehouse-adapters"
+description = "Adapter layer: in-memory/fake implementations of the application ports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+warehouse-application = { workspace = true }
+warehouse-domain = { workspace = true }
+
+[lints]
+workspace = true

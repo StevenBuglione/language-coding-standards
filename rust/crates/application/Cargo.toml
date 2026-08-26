@@ -1,0 +1,20 @@
+[package]
+name = "warehouse-application"
+description = "Use-case layer: ports owned here, PlaceOrder orchestration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+warehouse-domain = { workspace = true }
+thiserror.workspace = true
+
+[dev-dependencies]
+# Integration tests wire REAL adapter doubles into the use case; this
+# inward-facing dev-dependency is the documented exception to the layering
+# rule (production code never imports adapters from application).
+warehouse-adapters = { workspace = true }
+
+[lints]
+workspace = true

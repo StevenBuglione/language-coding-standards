@@ -54,7 +54,7 @@ jobs:
           rc=0
           for f in "${dockerfiles[@]}"; do
             echo "::group::hadolint ${f}"
-            docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" \
+            docker run --rm --entrypoint hadolint -v "$GITHUB_WORKSPACE:/repo:ro" \
               hadolint/hadolint:v2.15.1 \
               -c /repo/.hadolint.yaml "/repo/${f}" || rc=1
             echo "::endgroup::"

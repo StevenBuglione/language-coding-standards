@@ -1,0 +1,11 @@
+# gitleaks configuration (run by .github/workflows/meta.yml).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "intentional fake secrets in negative fixtures"
+paths = [
+  '''bad_examples/''',
+  '''.superpowers/'''
+]

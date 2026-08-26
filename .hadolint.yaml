@@ -1,0 +1,19 @@
+# Pragmatic hadolint configuration.
+# Default behavior kept: only errors fail builds (no failure-threshold override);
+# the codes below are ignored because version pinning is owned by lockfiles and
+# package managers elsewhere in this repo, not by Dockerfile incantations.
+
+ignored:
+  # DL3008 (apt-get: pin versions): base-image apt installs pull tooling whose
+  # exact versions are intentionally left to the distro; pinning every
+  # transitive apt package is maintenance noise we accept.
+  - DL3008
+  # DL3013 (pip: pin versions): Python dependencies are pinned by lockfiles and
+  # installed during the `deps` phase instead of inline in Dockerfiles.
+  - DL3013
+  # DL3016 (npm: pin versions): npm ranges are replaced by lockfile-only
+  # installs during the `deps` phase.
+  - DL3016
+  # DL3018 (apk: pin versions): Alpine package pinning is noise for the same
+  # reason as DL3008.
+  - DL3018

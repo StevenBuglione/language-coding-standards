@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>9-all</AnalysisLevel>
+    <AnalysisMode>All</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+    <Deterministic>true</Deterministic>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IsPackable>false</IsPackable>
+    <Version>1.0.0</Version>
+    <Authors>warehouse-order</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- CA1515 wants public library types internal; CA1014 wants CLSCompliant. -->
+    <!-- CA1034: nested result records are the port vocabulary. CA1716: Get/Next match CONTRACTS.md. CA1859: keep abstract result types. -->
+    <NoWarn>$(NoWarn);CA1515;CA1014;CA1032;CS1591;CA1034;CA1716;CA1859</NoWarn>
+  </PropertyGroup>
+</Project>

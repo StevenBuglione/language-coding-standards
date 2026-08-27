@@ -1,0 +1,43 @@
+name: csharp
+
+on:
+  push:
+    paths:
+      - "csharp/**"
+      - ".github/workflows/csharp.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
+  pull_request:
+    paths:
+      - "csharp/**"
+      - ".github/workflows/csharp.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/reusable-verify.yml
+    with:
+      language: csharp
+      image: mcr.microsoft.com/dotnet/sdk:9.0
+      timeout_minutes: 60

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Warehouse.Domain</RootNamespace>
+    <Description>Canonical warehouse-order domain v2 value objects and aggregate.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageId>Warehouse.Domain</PackageId>
+  </PropertyGroup>
+</Project>

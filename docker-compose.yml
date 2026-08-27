@@ -1,53 +1,45 @@
-# Hermetic local runners, one service per language template.
-# Services activate as templates land: each build fails until <lang>/Dockerfile
-# exists — that is expected while the templates arrive incrementally.
+# Hermetic local runners generated from standards/languages.yaml.
+# Default profile: implemented packs only. Planned languages have no service
+# until their directory exists (ADR-006).
 name: language-coding-standards
 
 services:
   python:
     build: { context: ./python }
-    volumes: [ './python:/workspace' ]
+    volumes:
+      - ./python:/workspace
     working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
+    entrypoint: ["bash", "./verify.sh"]
+    mem_limit: 2g
 
   typescript:
     build: { context: ./typescript }
-    volumes: [ './typescript:/workspace' ]
+    volumes:
+      - ./typescript:/workspace
     working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
+    entrypoint: ["bash", "./verify.sh"]
+    mem_limit: 2g
 
   go:
     build: { context: ./go }
-    volumes: [ './go:/workspace' ]
+    volumes:
+      - ./go:/workspace
     working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
+    entrypoint: ["bash", "./verify.sh"]
+    mem_limit: 2g
 
   rust:
     build: { context: ./rust }
-    volumes: [ './rust:/workspace' ]
+    volumes:
+      - ./rust:/workspace
     working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
+    entrypoint: ["bash", "./verify.sh"]
+    mem_limit: 4g
 
   java:
     build: { context: ./java }
-    volumes: [ './java:/workspace' ]
+    volumes:
+      - ./java:/workspace
     working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
-
-  csharp:
-    build: { context: ./csharp }
-    volumes: [ './csharp:/workspace' ]
-    working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
-
-  kotlin:
-    build: { context: ./kotlin }
-    volumes: [ './kotlin:/workspace' ]
-    working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
-
-  swift:
-    build: { context: ./swift }
-    volumes: [ './swift:/workspace' ]
-    working_dir: /workspace
-    entrypoint: [ 'bash', './verify.sh' ]
+    entrypoint: ["bash", "./verify.sh"]
+    mem_limit: 3g

@@ -4,7 +4,6 @@ on:
   push:
   pull_request:
   schedule:
-    # Monthly repo hygiene run.
     - cron: "23 5 1 * *"
 
 permissions:
@@ -18,9 +17,12 @@ jobs:
   workflows:
     name: Lint GitHub workflows + enforce LF
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: actionlint over .github/workflows/**
         run: >
@@ -40,9 +42,12 @@ jobs:
   dockerfiles:
     name: Lint Dockerfiles
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: hadolint over **/Dockerfile
         run: |
@@ -64,9 +69,12 @@ jobs:
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: gitleaks detect (--no-git)
         run: >
@@ -77,25 +85,53 @@ jobs:
   action-pins:
     name: Enforce action pinning policy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Scan every "uses:" ref in workflow files
+      - name: Require full commit SHA or local reusable workflow
         shell: bash
         run: |
           rc=0
           while IFS= read -r u; do
-            if [[ "$u" =~ ^actions/[A-Za-z0-9._/-]+@v[0-9]+$ ]]; then
+            if [[ "$u" == ./* ]]; then
               :
-            elif [[ "$u" == ./* ]]; then
+            elif [[ "$u" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40}$ ]]; then
               :
             else
-              echo "::error::uses: ref is neither 'actions/<name>@v<n>' nor local ('./...'): '${u}'"
+              echo "::error::uses: ref must be owner/repo@<40-char-sha> or local './...': '${u}'"
               rc=1
             fi
-          done < <(sed -nE 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([^[:space:]#]+).*$/\2/p' .github/workflows/*.yml .github/workflows/*.yaml)
+          done < <(sed -nE 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([^[:space:]#]+).*$/\2/p' .github/workflows/*.yml)
           if [ "$rc" -eq 0 ]; then
-            echo "All uses: refs comply with the pinning policy."
+            echo "All uses: refs are full-SHA pinned or local."
           fi
           exit "$rc"
+
+  contract:
+    name: Manifest + conformance schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate conformance vectors
+        run: python3 conformance/v2/validate.py
+      - name: Conformance unit tests
+        run: python3 -m unittest discover -s conformance/v2/tests
+      - name: Manifest default selection
+        run: |
+          mapfile -t langs < <(python3 scripts/manifest.py --list)
+          printf '%s\n' "${langs[@]}"
+          python3 -m unittest discover -s scripts/tests
+          expected=$'go\njava\npython\nrust\ntypescript'
+          actual="$(printf '%s\n' "${langs[@]}")"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "::error::default language selection drifted"
+            exit 1
+          fi

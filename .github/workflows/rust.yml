@@ -1,10 +1,10 @@
-name: typescript
+name: rust
 
 on:
   push:
     paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
+      - "rust/**"
+      - ".github/workflows/rust.yml"
       - ".github/workflows/reusable-verify.yml"
       - "conformance/**"
       - "docs/CONTRACTS.md"
@@ -15,8 +15,8 @@ on:
       - "docker-compose.yml"
   pull_request:
     paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
+      - "rust/**"
+      - ".github/workflows/rust.yml"
       - ".github/workflows/reusable-verify.yml"
       - "conformance/**"
       - "docs/CONTRACTS.md"
@@ -38,5 +38,6 @@ jobs:
   verify:
     uses: ./.github/workflows/reusable-verify.yml
     with:
-      language: typescript
-      image: node:24-bookworm
+      language: rust
+      image: rust:1.98.0-bookworm
+      timeout_minutes: 75

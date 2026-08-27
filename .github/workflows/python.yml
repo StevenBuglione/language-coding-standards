@@ -5,61 +5,39 @@ on:
     paths:
       - "python/**"
       - ".github/workflows/python.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
   pull_request:
     paths:
       - "python/**"
       - ".github/workflows/python.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # Phase split per docs/CONTRACTS.md §5. The container is the full python:3.13
-  # image (git + pip included) so no apt steps are needed; uv is installed at the
-  # exact version pinned in python/Dockerfile so local and CI toolchains match.
-  static:
-    name: static gates
-    runs-on: ubuntu-latest
-    container:
+  verify:
+    uses: ./.github/workflows/reusable-verify.yml
+    with:
+      language: python
       image: python:3.13
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install pinned uv
-        run: pip install --no-cache-dir uv==0.12.6
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: deps format lint types arch deadcode
-        run: bash ./verify.sh deps format lint types arch deadcode
-        working-directory: python
-
-  test:
-    name: tests and coverage
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.13
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install pinned uv
-        run: pip install --no-cache-dir uv==0.12.6
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: test coverage
-        run: bash ./verify.sh deps test coverage
-        working-directory: python
-
-  supply:
-    name: supply chain
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.13
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install pinned uv
-        run: pip install --no-cache-dir uv==0.12.6
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: security deps-hygiene negative
-        run: bash ./verify.sh deps security deps-hygiene negative
-        working-directory: python
+      setup: pip install --no-cache-dir uv==0.12.6

@@ -5,55 +5,38 @@ on:
     paths:
       - "go/**"
       - ".github/workflows/go.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
   pull_request:
     paths:
       - "go/**"
       - ".github/workflows/go.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # Phase split per docs/CONTRACTS.md §5. The golang:1.26-bookworm image IS the
-  # toolchain pin (GOTOOLCHAIN=local); verify.sh's deps phase installs the pinned
-  # lint/vuln tools, so no quality tooling is baked into any layer.
-  static:
-    name: static gates
-    runs-on: ubuntu-latest
-    container:
+  verify:
+    uses: ./.github/workflows/reusable-verify.yml
+    with:
+      language: go
       image: golang:1.26-bookworm
-    steps:
-      - uses: actions/checkout@v5
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: deps format lint types arch deadcode
-        run: bash ./verify.sh deps format lint types arch deadcode
-        working-directory: go
-
-  test:
-    name: tests and coverage
-    runs-on: ubuntu-latest
-    container:
-      image: golang:1.26-bookworm
-    steps:
-      - uses: actions/checkout@v5
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: test coverage
-        run: bash ./verify.sh deps test coverage
-        working-directory: go
-
-  supply:
-    name: supply chain
-    runs-on: ubuntu-latest
-    container:
-      image: golang:1.26-bookworm
-    steps:
-      - uses: actions/checkout@v5
-      - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: security deps-hygiene negative
-        run: bash ./verify.sh deps security deps-hygiene negative
-        working-directory: go

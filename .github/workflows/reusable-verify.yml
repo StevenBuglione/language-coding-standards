@@ -1,0 +1,104 @@
+name: reusable-verify
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      setup:
+        required: false
+        type: string
+        default: ""
+      static_phases:
+        required: false
+        type: string
+        default: "deps format lint types arch deadcode"
+      test_phases:
+        required: false
+        type: string
+        default: "deps test coverage"
+      supply_phases:
+        required: false
+        type: string
+        default: "deps security deps-hygiene negative"
+      timeout_minutes:
+        required: false
+        type: number
+        default: 45
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: static gates
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ${{ inputs.image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Extra setup
+        if: ${{ inputs.setup != '' }}
+        run: ${{ inputs.setup }}
+      - name: static capabilities
+        working-directory: ${{ inputs.language }}
+        run: bash ./verify.sh ${{ inputs.static_phases }}
+
+  test:
+    name: tests and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ${{ inputs.image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Extra setup
+        if: ${{ inputs.setup != '' }}
+        run: ${{ inputs.setup }}
+      - name: test capabilities
+        working-directory: ${{ inputs.language }}
+        run: bash ./verify.sh ${{ inputs.test_phases }}
+
+  supply:
+    name: supply chain
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ${{ inputs.image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Extra setup
+        if: ${{ inputs.setup != '' }}
+        run: ${{ inputs.setup }}
+      - name: supply capabilities
+        working-directory: ${{ inputs.language }}
+        run: bash ./verify.sh ${{ inputs.supply_phases }}

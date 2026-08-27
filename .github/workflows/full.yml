@@ -2,28 +2,68 @@ name: full
 
 on:
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
-# Planned nightly full tiers (land as templates arrive):
-#   - mutation testing floors (python and typescript first): the optional
-#     `mutation` phase of verify.sh, which runs ONLY here — never in the
-#     default phase set.
-#   - slow audits: deep dependency review, license scans, long-running
-#     security passes that are too slow for pull-request CI.
-#   - integration suites beyond the unit/property tier.
+  cancel-in-progress: false
 
 jobs:
-  placeholder:
-    name: placeholder
+  matrix:
+    name: full ${{ matrix.language }}
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            image: golang:1.26-bookworm
+            setup: ""
+          - language: java
+            image: maven:3.9-eclipse-temurin-25
+            setup: ""
+          - language: python
+            image: python:3.13
+            setup: pip install --no-cache-dir uv==0.12.6
+          - language: rust
+            image: rust:1.98.0-bookworm
+            setup: ""
+          - language: typescript
+            image: node:24-bookworm
+            setup: ""
+    container:
+      image: ${{ matrix.image }}
     steps:
-      - name: Placeholder for the nightly full tier
-        run: echo "nightly full tier lands as templates arrive"
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Container preamble
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Extra setup
+        if: ${{ matrix.setup != '' }}
+        run: ${{ matrix.setup }}
+      - name: Default capabilities
+        working-directory: ${{ matrix.language }}
+        run: bash ./verify.sh
+      - name: Full-tier capabilities
+        working-directory: ${{ matrix.language }}
+        env:
+          VERIFY_TIER: full
+        run: bash ./verify.sh mutation
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-${{ matrix.language }}
+          path: artifacts/**
+          if-no-files-found: ignore

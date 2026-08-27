@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "defaultStates": ["experimental", "candidate", "reference"],
+  "languages": {
+    "go": {
+      "displayName": "Go",
+      "state": "experimental",
+      "folder": "go",
+      "verifier": "go/verify.sh",
+      "workflow": ".github/workflows/go.yml",
+      "dockerfile": "go/Dockerfile",
+      "spec": "go/LANG_SPEC.md",
+      "owner": "unassigned",
+      "toolchain": "Go 1.26",
+      "composeService": "go",
+      "artifact": "module",
+      "os": ["linux"],
+      "image": {
+        "repository": "golang",
+        "tag": "1.26-bookworm",
+        "digest": null
+      },
+      "propertyTesting": "testing/quick + native fuzz",
+      "architecture": "internal/package boundaries + golangci-lint",
+      "sast": "gosec via golangci-lint",
+      "dependencyVulnerability": "govulncheck",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile", "architecture",
+        "unit", "property", "integration", "coverage", "dead-code",
+        "sast", "dependency-vulnerability", "lock-integrity",
+        "negative-fixtures"
+      ]
+    },
+    "java": {
+      "displayName": "Java",
+      "state": "experimental",
+      "folder": "java",
+      "verifier": "java/verify.sh",
+      "workflow": ".github/workflows/java.yml",
+      "dockerfile": "java/Dockerfile",
+      "spec": "java/LANG_SPEC.md",
+      "owner": "unassigned",
+      "toolchain": "JDK 25 + Maven 3.9 wrapper",
+      "composeService": "java",
+      "artifact": "jar",
+      "os": ["linux"],
+      "image": {
+        "repository": "maven",
+        "tag": "3.9-eclipse-temurin-25",
+        "digest": null
+      },
+      "propertyTesting": "pending reviewed replacement (jqwik denylisted)",
+      "architecture": "ArchUnit",
+      "sast": "SpotBugs/FindSecBugs",
+      "dependencyVulnerability": "pending",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile", "architecture",
+        "unit", "integration", "coverage", "sast", "lock-integrity",
+        "negative-fixtures"
+      ]
+    },
+    "python": {
+      "displayName": "Python",
+      "state": "experimental",
+      "folder": "python",
+      "verifier": "python/verify.sh",
+      "workflow": ".github/workflows/python.yml",
+      "dockerfile": "python/Dockerfile",
+      "spec": "python/LANG_SPEC.md",
+      "owner": "unassigned",
+      "toolchain": "CPython 3.13 + uv 0.12.6",
+      "composeService": "python",
+      "artifact": "wheel",
+      "os": ["linux"],
+      "image": {
+        "repository": "python",
+        "tag": "3.13-slim",
+        "digest": null
+      },
+      "propertyTesting": "hypothesis",
+      "architecture": "import-linter",
+      "sast": "ruff",
+      "dependencyVulnerability": "pip-audit",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile", "architecture",
+        "unit", "property", "integration", "coverage", "dead-code",
+        "sast", "dependency-vulnerability", "lock-integrity",
+        "negative-fixtures"
+      ]
+    },
+    "rust": {
+      "displayName": "Rust",
+      "state": "experimental",
+      "folder": "rust",
+      "verifier": "rust/verify.sh",
+      "workflow": ".github/workflows/rust.yml",
+      "dockerfile": "rust/Dockerfile",
+      "spec": "rust/LANG_SPEC.md",
+      "owner": "unassigned",
+      "toolchain": "Rust 1.98.0",
+      "composeService": "rust",
+      "artifact": "crate",
+      "os": ["linux"],
+      "image": {
+        "repository": "rust",
+        "tag": "1.98.0-bookworm",
+        "digest": null
+      },
+      "propertyTesting": "proptest / cargo fuzz (partial)",
+      "architecture": "workspace crate boundaries",
+      "sast": "clippy",
+      "dependencyVulnerability": "cargo-deny",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile", "architecture",
+        "unit", "integration", "coverage", "sast",
+        "dependency-vulnerability", "dependency-policy", "lock-integrity",
+        "negative-fixtures"
+      ]
+    },
+    "typescript": {
+      "displayName": "TypeScript",
+      "state": "experimental",
+      "folder": "typescript",
+      "verifier": "typescript/verify.sh",
+      "workflow": ".github/workflows/typescript.yml",
+      "dockerfile": "typescript/Dockerfile",
+      "spec": "typescript/LANG_SPEC.md",
+      "owner": "unassigned",
+      "toolchain": "Node 24 + pnpm via Corepack",
+      "composeService": "typescript",
+      "artifact": "package",
+      "os": ["linux"],
+      "image": {
+        "repository": "node",
+        "tag": "24-bookworm",
+        "digest": null
+      },
+      "propertyTesting": "fast-check",
+      "architecture": "dependency-cruiser",
+      "sast": "eslint-plugin-security (partial) / CodeQL pending",
+      "dependencyVulnerability": "pnpm audit (must not audit empty production set)",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile", "architecture",
+        "unit", "property", "integration", "coverage", "dead-code",
+        "dependency-policy", "lock-integrity", "negative-fixtures"
+      ]
+    },
+    "csharp": {
+      "displayName": "C#",
+      "state": "planned",
+      "folder": "csharp",
+      "verifier": null,
+      "workflow": null,
+      "dockerfile": null,
+      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "owner": "unassigned",
+      "toolchain": "TBD (.NET 10 / global.json)",
+      "composeService": null,
+      "artifact": "nupkg",
+      "os": ["linux"],
+      "image": {
+        "repository": "mcr.microsoft.com/dotnet/sdk",
+        "tag": null,
+        "digest": null
+      },
+      "propertyTesting": "FsCheck or reviewed equivalent",
+      "architecture": "NetArchTest / ArchUnitNET",
+      "sast": "Roslyn analyzers",
+      "dependencyVulnerability": "dotnet list package --vulnerable",
+      "requiredCapabilities": []
+    },
+    "kotlin": {
+      "displayName": "Kotlin",
+      "state": "planned",
+      "folder": "kotlin",
+      "verifier": null,
+      "workflow": null,
+      "dockerfile": null,
+      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "owner": "unassigned",
+      "toolchain": "TBD (Kotlin + Gradle wrapper)",
+      "composeService": null,
+      "artifact": "jar",
+      "os": ["linux"],
+      "image": {
+        "repository": "eclipse-temurin",
+        "tag": null,
+        "digest": null
+      },
+      "propertyTesting": "kotest property or reviewed equivalent",
+      "architecture": "ArchUnit",
+      "sast": "detekt",
+      "dependencyVulnerability": "gradle dependency verification + OWASP",
+      "requiredCapabilities": []
+    },
+    "swift": {
+      "displayName": "Swift",
+      "state": "planned",
+      "folder": "swift",
+      "verifier": null,
+      "workflow": null,
+      "dockerfile": null,
+      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "owner": "unassigned",
+      "toolchain": "TBD (SwiftPM)",
+      "composeService": null,
+      "artifact": "swiftpm library",
+      "os": ["linux"],
+      "image": {
+        "repository": "swift",
+        "tag": null,
+        "digest": null
+      },
+      "propertyTesting": "Swift Testing / swift-check",
+      "architecture": "package target boundaries",
+      "sast": "SwiftPM warnings-as-errors + sanitizers",
+      "dependencyVulnerability": "SwiftPM package security",
+      "requiredCapabilities": []
+    }
+  }
+}

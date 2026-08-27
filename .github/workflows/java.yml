@@ -1,10 +1,10 @@
-name: typescript
+name: java
 
 on:
   push:
     paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
+      - "java/**"
+      - ".github/workflows/java.yml"
       - ".github/workflows/reusable-verify.yml"
       - "conformance/**"
       - "docs/CONTRACTS.md"
@@ -15,8 +15,8 @@ on:
       - "docker-compose.yml"
   pull_request:
     paths:
-      - "typescript/**"
-      - ".github/workflows/typescript.yml"
+      - "java/**"
+      - ".github/workflows/java.yml"
       - ".github/workflows/reusable-verify.yml"
       - "conformance/**"
       - "docs/CONTRACTS.md"
@@ -38,5 +38,6 @@ jobs:
   verify:
     uses: ./.github/workflows/reusable-verify.yml
     with:
-      language: typescript
-      image: node:24-bookworm
+      language: java
+      image: maven:3.9-eclipse-temurin-25
+      timeout_minutes: 60

@@ -20,4 +20,15 @@ public final class InvalidOrderException extends RuntimeException {
   public InvalidOrderException(String message) {
     super(message);
   }
+
+  /**
+   * Creates the exception with a reason and the underlying cause (for example, arithmetic
+   * overflow).
+   *
+   * @param message what invariant was violated
+   * @param cause the overflow or other checked-to-unchecked conversion source
+   */
+  public InvalidOrderException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

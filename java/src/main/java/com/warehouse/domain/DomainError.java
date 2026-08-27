@@ -1,18 +1,22 @@
 package com.warehouse.domain;
 
-import java.util.UUID;
-
 /**
  * Sealed hierarchy of recoverable domain-rule violations.
  *
  * <p>Instances of these payloads — never exceptions — cross the use-case boundary inside {@code
- * PlaceOrderResult.Failure}. The sealed permit list is exhaustive: a failure carries exactly one of
- * the three canonical domain errors, and javac rejects any fourth variant at compile time.
+ * PlaceOrderResult.Failure}. The sealed permit list is exhaustive: javac rejects an undeclared
+ * variant at compile time.
  */
 public sealed interface DomainError
-    permits DomainError.InsufficientStockError,
+    permits DomainError.CompensationFailureError,
+        DomainError.InsufficientStockError,
         DomainError.InvalidOrderError,
-        DomainError.OrderAlreadyShippedError {
+        DomainError.OrderAlreadyShippedError,
+        DomainError.PaymentDeclinedError,
+        DomainError.PersistenceConflictError {
+
+  /** Refund or reservation release failed after a partial success. */
+  record CompensationFailureError(String stage, String detail) implements DomainError {}
 
   /** The inventory could not cover the requested quantity for a SKU. */
   record InsufficientStockError(Sku sku, Quantity requested, int available)
@@ -22,5 +26,11 @@ public sealed interface DomainError
   record InvalidOrderError(String reason) implements DomainError {}
 
   /** A shipped order can no longer be mutated. */
-  record OrderAlreadyShippedError(UUID orderId) implements DomainError {}
+  record OrderAlreadyShippedError(OrderId orderId) implements DomainError {}
+
+  /** The payment processor refused to charge the order. */
+  record PaymentDeclinedError(String reason) implements DomainError {}
+
+  /** An optimistic save lost a compare-and-set race. */
+  record PersistenceConflictError(String reason) implements DomainError {}
 }

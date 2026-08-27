@@ -36,12 +36,11 @@
   </rule>
 
   <!-- ==== Multithreading ===============================================
-       UseConcurrentHashMap excluded: its heuristic flags every HashMap-typed
-       field as shared state, but every map in this template lives inside a
-       deliberately single-threaded test double (CONTRACTS.md §2 adapters);
-       swapping in ConcurrentHashMap would advertise thread safety nothing
-       verifies. Real concurrent collections must justify themselves in
-       review when they first appear. -->
+       UseConcurrentHashMap excluded: adapter maps are guarded by an explicit
+       ReentrantLock so reserveAll/charge/save stay atomic (CONTRACTS.md §2).
+       The rule flags every HashMap field as if it were unsynchronized shared
+       state; swapping in ConcurrentHashMap would not make multi-key reserveAll
+       atomic and would advertise a different safety model than the lock. -->
   <rule ref="category/java/multithreading.xml">
     <exclude name="UseConcurrentHashMap"/>
   </rule>

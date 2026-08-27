@@ -47,6 +47,29 @@ class ArchitectureTest {
           .dependOnClassesThat()
           .resideInAnyPackage("com.warehouse.application..", "com.warehouse.adapters..");
 
+  /**
+   * Currency codes are ISO-style strings; {@code java.util.Currency} rejects valid codes such as
+   * {@code ZZZ} and must not be the domain's public (or internal) type.
+   */
+  @ArchTest
+  static final ArchRule domainDoesNotUseJdkCurrency =
+      noClasses()
+          .that()
+          .resideInAPackage("com.warehouse.domain..")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("java.util.Currency");
+
+  /** Order identifiers are injected strings; the domain must not mint {@code UUID}s. */
+  @ArchTest
+  static final ArchRule domainDoesNotUseUuid =
+      noClasses()
+          .that()
+          .resideInAPackage("com.warehouse.domain..")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("java.util.UUID");
+
   /** No package cycles between top-level warehouse slices. */
   @ArchTest
   static final ArchRule slicesAreCycleFree =

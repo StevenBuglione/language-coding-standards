@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 # Canonical gate runner for the Swift template (CONTRACTS.md §1).
-#
-# Usage:
-#   ./verify.sh              # all phases, canonical order
-#   ./verify.sh [phase...]   # subset, still canonical order
-#
-# Prints exactly one "GATE <phase>: PASS" line per phase on stdout; tool
-# diagnostics go to stderr. Exits nonzero at the first failing phase.
-# Evidence is Linux (`swift:6.0`). Apple platforms are unproven.
+# Evidence is Linux (`swift:6.0`); Apple SDK behavior remains unproven.
 
 set -euo pipefail
 
@@ -15,10 +8,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=capabilities.sh
 source ./capabilities.sh
 
-# Container preamble (CONTRACTS.md §5): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
-
-# Hermetic caches stay inside the mounted workspace (CONTRACTS.md §5).
 mkdir -p .cache .build
 export XDG_CACHE_HOME="${PWD}/.cache"
 
@@ -51,9 +41,7 @@ have_swift_format() {
 }
 
 run_format() {
-  if ! swift format lint --strict --recursive Sources Tests; then
-    return 1
-  fi
+  swift format lint --strict --recursive Sources Tests || return 1
   swift format lint --strict Package.swift
 }
 
@@ -62,40 +50,32 @@ tests_ran() {
   grep -qE 'Test run with [1-9][0-9]* tests|Executed [1-9][0-9]* tests' <<<"${output}"
 }
 
-run_unit() {
+run_tests() {
   local output rc
   rc=0
-  output="$(swift test 2>&1)" || rc=$?
+  output="$(swift test "$@" 2>&1)" || rc=$?
   printf '%s\n' "${output}" >&2
   if ((rc != 0)); then
     return "${rc}"
   fi
   if ! tests_ran "${output}"; then
-    printf 'zero tests executed\n' >&2
+    printf 'zero tests executed for swift test %s\n' "$*" >&2
     return 1
   fi
 }
 
 run_asan() {
-  # Linux-only runtime sanitizer (Swift server guide). Thread sanitizer is a
-  # separate run because it is incompatible with ASan.
-  # LeakSanitizer reports ~144B from libXCTest/libswiftCore at process exit on
-  # this image; that is not Warehouse. Keep use-after-free/overflow detection.
   ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0}" \
-    swift test --sanitize=address --filter PlaceOrderTests
+    run_tests --sanitize=address --filter PlaceOrderTests
 }
 
 run_package() {
-  if ! swift build -c release; then
-    printf 'swift build -c release failed\n' >&2
-    return 1
-  fi
+  swift build -c release || return 1
   local tmp pkg_id
   tmp="$(mktemp -d)"
-  # SwiftPM identifies a path dependency by the directory name, not Package.swift's name.
   pkg_id="$(basename "${PWD}")"
   mkdir -p "${tmp}/Consumer/Sources/Consumer"
-  cat >"${tmp}/Consumer/Package.swift" <<EOF
+  cat >"${tmp}/Consumer/Package.swift" <<EOF_PACKAGE
 // swift-tools-version: 6.0
 import PackageDescription
 let package = Package(
@@ -103,13 +83,22 @@ let package = Package(
   dependencies: [.package(path: "${PWD}")],
   targets: [.executableTarget(name: "Consumer", dependencies: [.product(name: "Warehouse", package: "${pkg_id}")])]
 )
-EOF
-  printf 'import Warehouse\n@main struct Run { static func main() { _ = try? Money(minorUnits: 0, currency: "ZZZ") } }\n' \
-    >"${tmp}/Consumer/Sources/Consumer/main.swift"
+EOF_PACKAGE
+  cat >"${tmp}/Consumer/Sources/Consumer/main.swift" <<'EOF_CONSUMER'
+import Warehouse
+@main struct Run {
+    static func main() {
+        _ = try? Money(minorUnits: 0, currency: "ZZZ")
+    }
+}
+EOF_CONSUMER
   (
     cd "${tmp}/Consumer"
     swift build
   )
+  local rc=$?
+  rm -rf "${tmp}"
+  return "${rc}"
 }
 
 cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
@@ -129,10 +118,13 @@ for phase in "${phases[@]}"; do
       printf 'GATE lint: SKIP_UNSUPPORTED(no SwiftLint or equivalent pinned in this experimental pack)\n'
       ;;
     compile) gate compile swift build --build-tests ;;
-    architecture) gate architecture swift test --filter ArchitectureTests ;;
-    unit) gate unit swift test --filter 'MoneyTests|QuantityTests|SkuTests|OrderTests|ConformanceTests|PropertyTests|ArchitectureTests' ;;
-    property) gate property swift test --filter PropertyTests ;;
-    integration) gate integration swift test --filter PlaceOrderTests ;;
+    architecture) gate architecture run_tests --filter ArchitectureTests ;;
+    unit)
+      gate unit run_tests --filter \
+        'MoneyTests|QuantityTests|SkuTests|OrderTests|ConformanceTests|PropertyTests|ArchitectureTests'
+      ;;
+    property) gate property run_tests --filter PropertyTests ;;
+    integration) gate integration run_tests --filter PlaceOrderTests ;;
     package) gate package run_package ;;
     coverage)
       printf 'GATE coverage: SKIP_UNSUPPORTED(swift test --enable-code-coverage floors not parsed yet)\n'
@@ -154,9 +146,9 @@ for phase in "${phases[@]}"; do
     mutation)
       printf 'GATE mutation: SKIP_UNSUPPORTED(no trustworthy Swift mutator; do not simulate one)\n'
       ;;
-    conformance) gate conformance swift test --filter ConformanceTests ;;
+    conformance) gate conformance run_tests --filter ConformanceTests ;;
     reproducibility)
-      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is root evidence)\n'
       ;;
     *)
       printf 'internal error: unhandled capability %s\n' "${phase}" >&2
@@ -165,7 +157,6 @@ for phase in "${phases[@]}"; do
   esac
 done
 
-# Linux ASan is not mutation and not CodeQL. Run it only on the full tier.
 if [[ "${VERIFY_TIER:-}" == "full" ]]; then
   gate sanitizers run_asan
 fi

@@ -49,7 +49,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          if command -v git >/dev/null 2>&1; then
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          else
+            echo "git is unavailable; checkout used the REST archive path"
+          fi
       - name: Extra setup
         if: ${{ inputs.setup != '' }}
         run: ${{ inputs.setup }}
@@ -72,7 +77,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          if command -v git >/dev/null 2>&1; then
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          else
+            echo "git is unavailable; checkout used the REST archive path"
+          fi
       - name: Extra setup
         if: ${{ inputs.setup != '' }}
         run: ${{ inputs.setup }}
@@ -95,7 +105,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Container preamble
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          if command -v git >/dev/null 2>&1; then
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          else
+            echo "git is unavailable; checkout used the REST archive path"
+          fi
       - name: Extra setup
         if: ${{ inputs.setup != '' }}
         run: ${{ inputs.setup }}

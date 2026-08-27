@@ -11,6 +11,7 @@
     reason = "adapter names intentionally echo their port (InMemoryInventoryGateway)"
 )]
 
+pub mod ids;
 pub mod inventory;
 pub mod payments;
 pub mod repository;

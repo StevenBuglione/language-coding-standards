@@ -1,32 +1,41 @@
-//! `PlaceOrderUseCase`: validate -> reserve -> charge -> persist, Result-typed.
+//! `PlaceOrderUseCase`: validate, reserveAll, charge, pay, persist, compensate.
 
-use warehouse_domain::error::{InsufficientStock, InvalidOrder, OrderAlreadyShipped};
+use warehouse_domain::error::{
+    CompensationFailure, DomainError, InsufficientStock, InvalidOrder, PaymentDeclined,
+    PersistenceConflict,
+};
 use warehouse_domain::order::{Order, OrderLine};
 
-use crate::ports::{InventoryGateway, OrderRepository, PaymentProcessor};
+use crate::ports::{
+    ChargeReceipt, InventoryGateway, OrderIdGenerator, OrderRepository, PaymentProcessor,
+    ReservationToken,
+};
 
 /// Failure payload: exactly one typed domain verdict
 /// ([CONTRACTS.md §2](../../docs/CONTRACTS.md)).
 ///
-/// The idiomatic [`Result`] IS the result type: success carries the
-/// persisted order ([`PersistedOrder`]), failure carries exactly one of the
-/// three domain errors.
+/// Decline is [`PlaceOrderError::PaymentDeclined`], never
+/// [`PlaceOrderError::InvalidOrder`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PlaceOrderError {
     /// The inventory could not cover a line's request.
     #[error(transparent)]
     InsufficientStock(#[from] InsufficientStock),
-    /// The order or its payment violated a structural rule.
+    /// The order violated a structural rule (including idempotency reuse).
     #[error(transparent)]
     InvalidOrder(#[from] InvalidOrder),
-    /// Reserved verdict for callers mutating already-shipped orders; the
-    /// validate-reserve-charge-persist flow itself never produces one, but
-    /// the contract names all three verdicts as the failure vocabulary.
+    /// The payment processor refused the charge.
     #[error(transparent)]
-    AlreadyShipped(#[from] OrderAlreadyShipped),
+    PaymentDeclined(#[from] PaymentDeclined),
+    /// Optimistic save lost a compare-and-set race.
+    #[error(transparent)]
+    PersistenceConflict(#[from] PersistenceConflict),
+    /// Refund or release failed after a partial success.
+    #[error(transparent)]
+    CompensationFailure(#[from] CompensationFailure),
 }
 
-/// Success payload: proof that the returned order was persisted.
+/// Success payload: proof that the returned order was persisted as `PAID`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedOrder {
     order: Order,
@@ -52,69 +61,194 @@ impl PersistedOrder {
     }
 }
 
-/// Orchestrates validate -> reserve -> charge -> persist without raising:
-/// every outcome is an `Ok` [`PersistedOrder`] or an `Err`
-/// [`PlaceOrderError`].
+/// Orchestrates the v2 place-order policy without panicking.
 ///
-/// Generic over its outbound ports (static dispatch — no trait objects, no
-/// allocation); adapters are injected at construction time.
-///
-/// The `Debug` bound lands on the port parameters, not on the use case's
-/// logic: any wiring that can print itself makes the whole assembly
-/// printable.
+/// Generic over its outbound ports (static dispatch — no trait objects);
+/// adapters are injected at construction time.
 #[derive(Debug)]
-pub struct PlaceOrderUseCase<I, P, R> {
+pub struct PlaceOrderUseCase<I, P, R, G> {
     inventory: I,
     payments: P,
     repository: R,
+    ids: G,
 }
 
-impl<I, P, R> PlaceOrderUseCase<I, P, R>
+impl<I, P, R, G> PlaceOrderUseCase<I, P, R, G>
 where
     I: InventoryGateway,
     P: PaymentProcessor,
     R: OrderRepository,
+    G: OrderIdGenerator,
 {
     /// Wires the use case to its outbound ports.
     #[must_use]
-    pub fn new(inventory: I, payments: P, repository: R) -> Self {
+    pub fn new(inventory: I, payments: P, repository: R, ids: G) -> Self {
         Self {
             inventory,
             payments,
             repository,
+            ids,
         }
     }
 
     /// Returns the wired ports back to the caller.
-    ///
-    /// Useful for teardown-time inspection of the adapters' state (e.g. in
-    /// tests that assert reservations or charge logs after [`Self::execute`]).
     #[must_use]
-    pub fn into_parts(self) -> (I, P, R) {
-        (self.inventory, self.payments, self.repository)
+    pub fn into_parts(self) -> (I, P, R, G) {
+        (self.inventory, self.payments, self.repository, self.ids)
     }
 
-    /// Validates the order, reserves stock for every line, collects
-    /// payment, then persists.
+    /// Validates, reserves, charges, marks `PAID`, persists; compensates
+    /// on failure. Retrying the same key and payload does not double-charge.
     ///
     /// # Errors
     ///
-    /// Returns [`PlaceOrderError::InsufficientStock`] when stock cannot
-    /// cover a line, [`PlaceOrderError::InvalidOrder`] when validation or
-    /// payment fails, and never panics: no exception crosses this boundary.
-    pub fn execute(&mut self, lines: Vec<OrderLine>) -> Result<PersistedOrder, PlaceOrderError> {
-        let order = Order::new(lines)?;
-        for line in order.lines() {
-            self.inventory
-                .reserve(line.sku().clone(), line.quantity())
-                .map_err(PlaceOrderError::InsufficientStock)?;
+    /// Returns a typed [`PlaceOrderError`] for validation, shortage,
+    /// decline, conflict, or compensation failure. Never panics.
+    pub fn execute(
+        &self,
+        lines: Vec<OrderLine>,
+        idempotency_key: &str,
+    ) -> Result<PersistedOrder, PlaceOrderError> {
+        if let Some(replayed) = self.replay(idempotency_key, &lines)? {
+            return Ok(replayed);
         }
-        self.payments
-            .charge(&order)
-            .map_err(PlaceOrderError::InvalidOrder)?;
-        let persisted = self.repository.save(order);
-        Ok(PersistedOrder::new(persisted))
+        let mut order = Order::new(self.ids.next(), lines)?;
+        let reserved = self.reserve(&order, idempotency_key)?;
+        let receipt = self.charge(&order, &reserved, idempotency_key)?;
+        self.pay_or_compensate(&mut order, &reserved, &receipt)?;
+        self.persist(&order, &reserved, &receipt, idempotency_key)
     }
+
+    fn replay(
+        &self,
+        key: &str,
+        lines: &[OrderLine],
+    ) -> Result<Option<PersistedOrder>, PlaceOrderError> {
+        let Some((prior, snapshot)) = self.repository.get_by_idempotency_key(key) else {
+            return Ok(None);
+        };
+        if prior == fingerprint(lines) {
+            return Ok(Some(PersistedOrder::new(snapshot)));
+        }
+        Err(PlaceOrderError::InvalidOrder(InvalidOrder::new(
+            "idempotency key reused with different payload",
+        )))
+    }
+
+    fn reserve(
+        &self,
+        order: &Order,
+        idempotency_key: &str,
+    ) -> Result<ReservationToken, PlaceOrderError> {
+        self.inventory
+            .reserve_all(order.id(), order.lines(), idempotency_key)
+            .map_err(PlaceOrderError::InsufficientStock)
+    }
+
+    fn charge(
+        &self,
+        order: &Order,
+        reserved: &ReservationToken,
+        idempotency_key: &str,
+    ) -> Result<ChargeReceipt, PlaceOrderError> {
+        match self.payments.charge(order, idempotency_key) {
+            Ok(receipt) => Ok(receipt),
+            Err(declined) => Err(self.release_or_fail(reserved, declined)),
+        }
+    }
+
+    fn pay_or_compensate(
+        &self,
+        order: &mut Order,
+        reserved: &ReservationToken,
+        receipt: &ChargeReceipt,
+    ) -> Result<(), PlaceOrderError> {
+        match order.pay() {
+            Ok(()) => Ok(()),
+            Err(error) => Err(self.compensate_then(reserved, receipt, from_pay(error))),
+        }
+    }
+
+    fn persist(
+        &self,
+        order: &Order,
+        reserved: &ReservationToken,
+        receipt: &ChargeReceipt,
+        idempotency_key: &str,
+    ) -> Result<PersistedOrder, PlaceOrderError> {
+        match self.repository.save(order, order.version()) {
+            Ok(saved) => {
+                self.remember(idempotency_key, order.lines(), &saved);
+                Ok(PersistedOrder::new(saved))
+            }
+            Err(conflict) => Err(self.compensate_then(
+                reserved,
+                receipt,
+                PlaceOrderError::PersistenceConflict(conflict),
+            )),
+        }
+    }
+
+    fn remember(&self, key: &str, lines: &[OrderLine], saved: &Order) {
+        self.repository
+            .remember_idempotency(key, &fingerprint(lines), saved);
+    }
+
+    fn release_or_fail(
+        &self,
+        token: &ReservationToken,
+        declined: PaymentDeclined,
+    ) -> PlaceOrderError {
+        match self.inventory.release(token) {
+            Ok(()) => PlaceOrderError::PaymentDeclined(declined),
+            Err(failure) => PlaceOrderError::CompensationFailure(failure),
+        }
+    }
+
+    fn compensate_then(
+        &self,
+        token: &ReservationToken,
+        receipt: &ChargeReceipt,
+        fallback: PlaceOrderError,
+    ) -> PlaceOrderError {
+        let refunded = self.payments.refund(receipt);
+        let released = self.inventory.release(token);
+        if let Err(failure) = refunded {
+            return PlaceOrderError::CompensationFailure(failure);
+        }
+        if let Err(failure) = released {
+            return PlaceOrderError::CompensationFailure(failure);
+        }
+        fallback
+    }
+}
+
+fn from_pay(error: DomainError) -> PlaceOrderError {
+    match error {
+        DomainError::InvalidOrder(error) => PlaceOrderError::InvalidOrder(error),
+        DomainError::AlreadyShipped(error) => {
+            PlaceOrderError::InvalidOrder(InvalidOrder::new(error.to_string()))
+        }
+        DomainError::InsufficientStock(_) => {
+            PlaceOrderError::InvalidOrder(InvalidOrder::new("unexpected stock error during pay"))
+        }
+    }
+}
+
+fn fingerprint(lines: &[OrderLine]) -> String {
+    let parts: Vec<String> = lines
+        .iter()
+        .map(|line| {
+            format!(
+                "{}:{}:{}:{}",
+                line.sku().code(),
+                line.quantity().value(),
+                line.unit_price().currency(),
+                line.unit_price().minor_units(),
+            )
+        })
+        .collect();
+    parts.join("|")
 }
 
 #[cfg(test)]
@@ -127,16 +261,14 @@ mod tests {
     #![allow(clippy::panic, reason = "a failed assertion IS the test failing")]
 
     use super::*;
-    use crate::ports::{Charged, Reserved};
+    use crate::ports::{ChargeReceipt, OrderIdGenerator, ReservationToken};
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use warehouse_domain::money::{Currency, Money};
-    use warehouse_domain::order::OrderId;
+    use warehouse_domain::order::{OrderId, OrderStatus};
     use warehouse_domain::quantity::Quantity;
     use warehouse_domain::sku::Sku;
 
-    // Inline fakes implementing the ports WITHOUT the adapters crate: proof
-    // that the use case compiles and runs against the interfaces alone.
     struct StubInventory {
         stock: RefCell<BTreeMap<Sku, u32>>,
     }
@@ -154,15 +286,38 @@ mod tests {
     }
 
     impl InventoryGateway for StubInventory {
-        fn reserve(&mut self, sku: Sku, quantity: Quantity) -> Result<Reserved, InsufficientStock> {
-            let mut stock = self.stock.borrow_mut();
-            let available = stock.get(&sku).copied().unwrap_or(0);
-            if available < quantity.value() {
-                return Err(InsufficientStock::new(sku, quantity, available));
-            }
-            stock.insert(sku, available - quantity.value());
-            Ok(Reserved)
+        fn reserve_all(
+            &self,
+            order_id: &OrderId,
+            lines: &[OrderLine],
+            key: &str,
+        ) -> Result<ReservationToken, InsufficientStock> {
+            debit(&mut self.stock.borrow_mut(), lines)?;
+            Ok(ReservationToken::new(order_id.clone(), key))
         }
+
+        fn release(&self, _token: &ReservationToken) -> Result<(), CompensationFailure> {
+            Ok(())
+        }
+    }
+
+    fn debit(stock: &mut BTreeMap<Sku, u32>, lines: &[OrderLine]) -> Result<(), InsufficientStock> {
+        for line in lines {
+            let available = stock.get(line.sku()).copied().unwrap_or(0);
+            if available < line.quantity().value() {
+                return Err(InsufficientStock::new(
+                    line.sku().clone(),
+                    line.quantity(),
+                    available,
+                ));
+            }
+        }
+        for line in lines {
+            if let Some(available) = stock.get_mut(line.sku()) {
+                *available -= line.quantity().value();
+            }
+        }
+        Ok(())
     }
 
     struct StubPayments {
@@ -171,21 +326,25 @@ mod tests {
     }
 
     impl StubPayments {
-        fn new() -> Self {
+        fn new(decline: bool) -> Self {
             Self {
-                decline: false,
+                decline,
                 charged: RefCell::new(0),
             }
         }
     }
 
     impl PaymentProcessor for StubPayments {
-        fn charge(&mut self, _order: &Order) -> Result<Charged, InvalidOrder> {
+        fn charge(&self, order: &Order, key: &str) -> Result<ChargeReceipt, PaymentDeclined> {
             *self.charged.borrow_mut() += 1;
             if self.decline {
-                return Err(InvalidOrder::new("payment declined".to_owned()));
+                return Err(PaymentDeclined::new("payment declined".to_owned()));
             }
-            Ok(Charged)
+            Ok(ChargeReceipt::new(order.id().clone(), key))
+        }
+
+        fn refund(&self, _receipt: &ChargeReceipt) -> Result<(), CompensationFailure> {
+            Ok(())
         }
     }
 
@@ -195,17 +354,36 @@ mod tests {
     }
 
     impl OrderRepository for StubRepository {
-        fn save(&mut self, order: Order) -> Order {
-            self.orders.borrow_mut().push(order.clone());
-            order
+        fn save(
+            &self,
+            order: &Order,
+            _expected_version: u32,
+        ) -> Result<Order, PersistenceConflict> {
+            let saved = order.snapshot();
+            self.orders.borrow_mut().push(saved.clone());
+            Ok(saved)
         }
 
-        fn get(&self, order_id: OrderId) -> Option<Order> {
+        fn get(&self, order_id: &OrderId) -> Option<Order> {
             self.orders
                 .borrow()
                 .iter()
                 .find(|order| order.id() == order_id)
                 .cloned()
+        }
+
+        fn get_by_idempotency_key(&self, _key: &str) -> Option<(String, Order)> {
+            None
+        }
+
+        fn remember_idempotency(&self, _key: &str, _fingerprint: &str, _order: &Order) {}
+    }
+
+    struct StubIds;
+
+    impl OrderIdGenerator for StubIds {
+        fn next(&self) -> OrderId {
+            OrderId::from_sequence(1)
         }
     }
 
@@ -221,31 +399,39 @@ mod tests {
         OrderLine::new(
             sku(code),
             Quantity::new(amount).unwrap(),
-            Money::from_minor(units, currency()),
+            Money::from_minor(units, currency()).unwrap(),
         )
     }
 
-    type UseCase = PlaceOrderUseCase<StubInventory, StubPayments, StubRepository>;
+    type UseCase = PlaceOrderUseCase<StubInventory, StubPayments, StubRepository, StubIds>;
 
     fn use_case(stock: &[(&str, u32)]) -> UseCase {
+        wired(stock, false)
+    }
+
+    fn wired(stock: &[(&str, u32)], decline: bool) -> UseCase {
         PlaceOrderUseCase::new(
             StubInventory::new(stock),
-            StubPayments::new(),
+            StubPayments::new(decline),
             StubRepository::default(),
+            StubIds,
         )
     }
 
     #[test]
-    fn happy_path_persists_after_reserving_and_charging() {
-        let mut use_case = use_case(&[("SKU-A", 10)]);
-        let outcome = use_case.execute(vec![line("SKU-A", 2, 300)]).unwrap();
+    fn happy_path_persists_paid_after_reserving_and_charging() {
+        let use_case = use_case(&[("SKU-A", 10)]);
+        let outcome = use_case
+            .execute(vec![line("SKU-A", 2, 300)], "idem-1")
+            .unwrap();
+        assert_eq!(outcome.order().status(), OrderStatus::Paid);
         assert_eq!(outcome.order().total().unwrap().minor_units(), 600);
     }
 
     #[test]
     fn empty_lines_fail_as_invalid_order() {
-        let mut use_case = use_case(&[]);
-        match use_case.execute(Vec::new()) {
+        let use_case = use_case(&[]);
+        match use_case.execute(Vec::new(), "idem-empty") {
             Err(PlaceOrderError::InvalidOrder(_)) => {}
             other => panic!("expected invalid-order verdict, got {other:?}"),
         }
@@ -253,8 +439,8 @@ mod tests {
 
     #[test]
     fn shortage_fails_without_charging_or_persisting() {
-        let mut use_case = use_case(&[("SKU-A", 1)]);
-        match use_case.execute(vec![line("SKU-A", 5, 100)]) {
+        let use_case = use_case(&[("SKU-A", 1)]);
+        match use_case.execute(vec![line("SKU-A", 5, 100)], "idem-short") {
             Err(PlaceOrderError::InsufficientStock(error)) => {
                 assert_eq!(error.available(), 1);
             }
@@ -263,19 +449,19 @@ mod tests {
     }
 
     #[test]
-    fn declined_payment_maps_to_invalid_order() {
-        let mut use_case = use_case(&[("SKU-A", 10)]);
-        use_case.payments.decline = true;
-        match use_case.execute(vec![line("SKU-A", 1, 100)]) {
-            Err(PlaceOrderError::InvalidOrder(_)) => {}
-            other => panic!("expected invalid-order verdict, got {other:?}"),
+    fn declined_payment_is_not_invalid_order() {
+        let use_case = wired(&[("SKU-A", 10)], true);
+        match use_case.execute(vec![line("SKU-A", 1, 100)], "idem-declined") {
+            Err(PlaceOrderError::PaymentDeclined(_)) => {}
+            other => panic!("expected payment-declined verdict, got {other:?}"),
         }
     }
 
     #[test]
     fn duplicate_skus_fail_before_any_reservation() {
-        let mut use_case = use_case(&[("SKU-A", 10)]);
-        match use_case.execute(vec![line("SKU-A", 1, 100), line("SKU-A", 1, 100)]) {
+        let use_case = use_case(&[("SKU-A", 10)]);
+        let lines = vec![line("SKU-A", 1, 100), line("SKU-A", 1, 100)];
+        match use_case.execute(lines, "idem-dup") {
             Err(PlaceOrderError::InvalidOrder(_)) => {}
             other => panic!("expected invalid-order verdict, got {other:?}"),
         }
@@ -283,8 +469,10 @@ mod tests {
 
     #[test]
     fn persisted_order_accessors_agree() {
-        let mut use_case = use_case(&[("SKU-A", 10)]);
-        let outcome = use_case.execute(vec![line("SKU-A", 2, 300)]).unwrap();
+        let use_case = use_case(&[("SKU-A", 10)]);
+        let outcome = use_case
+            .execute(vec![line("SKU-A", 2, 300)], "idem-acc")
+            .unwrap();
         let borrowed = outcome.order().clone();
         assert_eq!(outcome.into_inner(), borrowed);
     }
@@ -293,5 +481,12 @@ mod tests {
     fn place_order_error_displays_its_verdict() {
         let error = PlaceOrderError::from(InvalidOrder::new("no lines"));
         assert!(error.to_string().contains("no lines"));
+    }
+
+    #[test]
+    fn reservation_token_exposes_its_parts() {
+        let token = ReservationToken::new(OrderId::from_sequence(1), "idem");
+        assert_eq!(token.order_id().value(), "ord-1");
+        assert_eq!(token.idempotency_key(), "idem");
     }
 }

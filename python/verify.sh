@@ -51,6 +51,10 @@ uv_run() {
   uv run --locked "$@"
 }
 
+lock_digest() {
+  sha256sum uv.lock | awk '{print $1}'
+}
+
 run_bootstrap() {
   local python_minor uv_version
   python_minor="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
@@ -115,9 +119,21 @@ run_mutation() {
 }
 
 run_package() {
-  local tmp wheel
+  local tmp wheel before after
+  if ! uv lock --check; then
+    return 1
+  fi
+  before="$(lock_digest)"
   tmp="$(mktemp -d)"
-  if ! uv build --locked --out-dir "${tmp}"; then
+  # uv 0.12.6 does not expose `uv build --locked`; prove equivalent lock
+  # integrity by checking the lock first and rejecting any build-time change.
+  if ! uv build --out-dir "${tmp}"; then
+    rm -rf "${tmp}"
+    return 1
+  fi
+  after="$(lock_digest)"
+  if [[ "${before}" != "${after}" ]]; then
+    printf 'uv build mutated uv.lock\n' >&2
     rm -rf "${tmp}"
     return 1
   fi

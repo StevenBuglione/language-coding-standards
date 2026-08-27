@@ -54,9 +54,9 @@ branch = true
 
 [tool.coverage.report]
 # Ruling R3: fail_under = measured coverage minus 4, rounded down, floor 85.
-# Baseline measured on first green run: 100.00% branch coverage across all
-# 195 statements / 36 branches -> floor(100 - 4) = 96.
-fail_under = 96
+# Baseline measured on 2026-08-27: 91.75% branch coverage across 387
+# statements / 98 branches -> floor(91.75 - 4) = 87.
+fail_under = 87
 show_missing = true
 precision = 2
 

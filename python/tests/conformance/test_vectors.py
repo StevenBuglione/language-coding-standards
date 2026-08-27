@@ -89,7 +89,10 @@ def test_order_construct_and_transitions() -> None:
                 assert order.status is OrderStatus.NEW
                 assert order.id.value == expect["result"]["id"]
                 if "totalMinorUnits" in expect["result"]:
-                    assert str(order.total().minor_units) == expect["result"]["totalMinorUnits"]
+                    assert (
+                        str(order.total().minor_units)
+                        == expect["result"]["totalMinorUnits"]
+                    )
             else:
                 with pytest.raises(InvalidOrder):
                     Order(_lines(raw_lines), order_id=order_id)

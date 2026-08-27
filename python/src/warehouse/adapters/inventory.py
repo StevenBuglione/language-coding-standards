@@ -39,7 +39,10 @@ class InMemoryInventoryGateway:
         """Reserve every line atomically, or none."""
         with self._lock:
             if idempotency_key in self._reservations:
-                return ReservationToken(order_id=order_id, idempotency_key=idempotency_key)
+                return ReservationToken(
+                    order_id=order_id,
+                    idempotency_key=idempotency_key,
+                )
             needed: list[tuple[Sku, int]] = []
             for line in lines:
                 available = self._stock.get(line.sku, 0)

@@ -17,7 +17,10 @@ source ./capabilities.sh
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
 
-# Tool caches stay inside the mounted workspace (CONTRACTS.md §4).
+# Tool caches stay inside the mounted workspace (CONTRACTS.md §4). The
+# official Maven image exports MAVEN_CONFIG=/root/.m2; mvnw interprets that
+# image-specific value as a command-line argument, so clear it explicitly.
+export MAVEN_CONFIG=
 export MAVEN_USER_HOME="${PWD}/.m2wrapper"
 readonly REPO_FLAG="-Dmaven.repo.local=${PWD}/.m2repo"
 readonly REQUIRED_JAVA_VERSION="25"

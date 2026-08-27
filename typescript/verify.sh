@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 # Canonical gate runner for the TypeScript template (CONTRACTS.md §1).
-#
-# Usage:
-#   ./verify.sh              # all phases, canonical order
-#   ./verify.sh [phase...]   # subset, still canonical order
-#
-# Prints exactly one "GATE <phase>: PASS" line per phase on stdout; tool
-# diagnostics go to stderr. Exits nonzero at the first failing phase.
-# The optional `mutation` phase runs only with VERIFY_TIER=full (nightly).
 
 set -euo pipefail
 
@@ -15,7 +7,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=capabilities.sh
 source ./capabilities.sh
 
-# Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
 
 usage() {
@@ -43,12 +34,6 @@ gate() {
 }
 
 enable_pnpm() {
-  # Corepack ships with Node 24 (removed only in Node 25+) and resolves the
-  # exact pnpm version pinned by packageManager in package.json.
-  #
-  # Runs unconditionally at startup: CI splits the phase set across jobs
-  # (CONTRACTS.md §5), each in a fresh container, so pnpm availability can
-  # never depend on the deps phase having run in the same container.
   corepack enable pnpm >/dev/null 2>&1 || true
 }
 
@@ -59,27 +44,14 @@ run_deps() {
 }
 
 run_security() {
-  # Audit the complete lockfile, including toolchain/devDependencies. An
-  # empty production set is not meaningful security coverage.
+  # Audit the complete lockfile, including the build/test toolchain.
   pnpm audit --audit-level high
 }
 
 run_deps_hygiene() {
-  # A frozen-lockfile install is idempotent by contract: it must succeed
-  # when manifest and lockfile agree, fail loudly when they drift, and in
-  # both cases leave pnpm-lock.yaml byte-identical. The hash guard proves
-  # the no-mutation half directly — the compose mount exposes the template
-  # directory without .git metadata, so a git-based guard cannot run here
-  # (and a hash never fights CRLF normalization across platforms).
-  #
-  # errexit is suspended inside gate()'s `|| rc=$?` capture, so every
-  # fallible step here must fail explicitly instead of falling through.
   local before after
   before="$(sha256sum pnpm-lock.yaml)"
-  if ! pnpm install --frozen-lockfile; then
-    printf 'frozen-lockfile install failed\n' >&2
-    return 1
-  fi
+  pnpm install --frozen-lockfile || return 1
   after="$(sha256sum pnpm-lock.yaml)"
   if [[ "${before}" != "${after}" ]]; then
     printf 'pnpm install mutated pnpm-lock.yaml\n' >&2
@@ -106,11 +78,76 @@ run_mutation() {
 }
 
 run_package() {
-  pnpm exec tsc --pretty false
-  local tmp
+  local tmp tarball consumer rc
   tmp="$(mktemp -d)"
-  pnpm pack --pack-destination "${tmp}"
-  rm -rf "${tmp}"
+  consumer="${tmp}/consumer"
+  rm -rf dist
+  if ! pnpm exec tsc -p tsconfig.build.json --pretty false; then
+    rm -rf "${tmp}" dist
+    return 1
+  fi
+  printf '{"type":"commonjs"}\n' >dist/package.json
+  mkdir -p "${tmp}/artifact" "${consumer}/src"
+  if ! pnpm pack --pack-destination "${tmp}/artifact"; then
+    rm -rf "${tmp}" dist
+    return 1
+  fi
+  tarball="$(find "${tmp}/artifact" -maxdepth 1 -name '*.tgz' -print -quit)"
+  if [[ -z "${tarball}" ]]; then
+    printf 'pnpm pack produced no tarball\n' >&2
+    rm -rf "${tmp}" dist
+    return 1
+  fi
+  local contents required
+  contents="$(tar -tzf "${tarball}")" || { rm -rf "${tmp}" dist; return 1; }
+  for required in package/dist/index.js package/dist/index.d.ts package/dist/package.json; do
+    if ! grep -qx "${required}" <<<"${contents}"; then
+      printf 'package is missing required artifact %s\n' "${required}" >&2
+      rm -rf "${tmp}" dist
+      return 1
+    fi
+  done
+  if grep -q '^package/src/' <<<"${contents}"; then
+    printf 'package unexpectedly contains TypeScript source files\n' >&2
+    rm -rf "${tmp}" dist
+    return 1
+  fi
+  cat >"${consumer}/package.json" <<'EOF_PACKAGE'
+{"name":"warehouse-orders-consumer","private":true,"type":"commonjs"}
+EOF_PACKAGE
+  cat >"${consumer}/tsconfig.json" <<'EOF_TSCONFIG'
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "target": "ES2023",
+    "strict": true,
+    "skipLibCheck": false,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+EOF_TSCONFIG
+  cat >"${consumer}/src/index.ts" <<'EOF_CONSUMER'
+import { Money } from "warehouse-orders";
+const amount = Money.create(0, "ZZZ");
+if (amount.minorUnits !== 0 || amount.currency !== "ZZZ") {
+  throw new Error("installed package returned an invalid Money value");
+}
+EOF_CONSUMER
+  rc=0
+  (
+    cd "${consumer}"
+    npm install --ignore-scripts --no-audit --no-fund "${tarball}" >/dev/null
+  ) || rc=$?
+  if ((rc == 0)); then
+    pnpm exec tsc -p "${consumer}/tsconfig.json" --pretty false || rc=$?
+  fi
+  if ((rc == 0)); then
+    node "${consumer}/dist/index.js" || rc=$?
+  fi
+  rm -rf "${tmp}" dist
+  return "${rc}"
 }
 
 cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
@@ -130,7 +167,7 @@ for phase in "${phases[@]}"; do
     coverage) gate coverage pnpm exec vitest run --coverage ;;
     dead-code) gate dead-code pnpm exec knip ;;
     sast)
-      printf 'GATE sast: SKIP_UNSUPPORTED(eslint security plugin not installed; CodeQL is the repo-level SAST)\n'
+      printf 'GATE sast: SKIP_UNSUPPORTED(custom ESLint security bans exist; CodeQL is the repo-level SAST)\n'
       ;;
     dependency-vulnerability) gate dependency-vulnerability run_security ;;
     dependency-policy) gate dependency-policy pnpm exec knip ;;
@@ -141,7 +178,7 @@ for phase in "${phases[@]}"; do
       printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
       ;;
     reproducibility)
-      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is root evidence)\n'
       ;;
     *)
       printf 'internal error: unhandled capability %s\n' "${phase}" >&2

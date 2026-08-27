@@ -1,10 +1,21 @@
 {
   "name": "warehouse-orders",
   "version": "1.0.0",
-  "private": true,
-  "description": "Reference template: maximally strict CI gates around the canonical warehouse-order domain.",
+  "private": false,
+  "description": "Experimental strict TypeScript template for the canonical warehouse-order domain.",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
   "engines": {
     "node": ">=24 <25"
   },
@@ -14,11 +25,12 @@
     "format": "prettier --check .",
     "lint": "eslint . --report-unused-disable-directives",
     "types": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
     "arch": "depcruise src",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "deadcode": "knip",
-    "security": "pnpm audit --prod --audit-level high",
+    "security": "pnpm audit --audit-level high",
     "deps-hygiene": "pnpm install --frozen-lockfile",
     "negative": "bash bad_examples/assert.sh",
     "mutation": "stryker run"

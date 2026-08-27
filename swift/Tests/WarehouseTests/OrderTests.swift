@@ -42,7 +42,9 @@ struct OrderTests {
         line("SKU-2", quantity: 1, minorUnits: 1000),
       ]
     )
-    #expect(try order.total() == try usd(2000))
+    let total = try order.total()
+    let expected = try usd(2000)
+    #expect(total == expected)
   }
 
   @Test func rejectsMixedCurrenciesAtConstruction() {

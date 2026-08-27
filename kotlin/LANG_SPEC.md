@@ -52,9 +52,13 @@ capability, in canonical order.
 10. **coverage** — Kover 0.9.9 verify bound 70 (JetBrains Kotlin coverage).
 11. **dead-code** — `SKIP_UNSUPPORTED`.
 12. **sast** — detekt 1.23.8 (stable; detekt 2.x is still alpha as of 2026-08).
-13. **dependency-vulnerability** — `SKIP_UNSUPPORTED` (OWASP needs a pinned NVD store).
+    `detekt.yml` raises `style.ThrowsCount.max` to 5 for fail-fast domain
+    constructors (`Money.times`, `Order.invoke`).
+13. **dependency-vulnerability** — `SKIP_UNSUPPORTED` (OWASP Dependency-Check
+    needs a pinned NVD store; not faked in-container).
 14. **dependency-policy** — `gradle dependencies` (resolution against the graph).
-15. **lock-integrity** — `SKIP_UNSUPPORTED` until lockfiles are generated on JDK 21.
+15. **lock-integrity** — committed `gradle.lockfile` written on JDK 21
+    (`resolveAndLockAll --write-locks`); `gradle dependencies --offline`.
 16. **negative-fixtures** — `bash bad_examples/assert.sh`.
 17. **mutation** — `SKIP_UNSUPPORTED(PIT Kotlin bytecode mapping not fixture-proven)`.
 18. **conformance** — JUnit loads `conformance/v2/suites`.
@@ -84,10 +88,10 @@ Same warehouse-order v2 as Python:
   is present it is preferred; otherwise the official `gradle:8.14-jdk21`
   image provides the `gradle` binary. Wrapper generation is the intended
   supply-chain pin.
-- **No ArchUnit, Kover, detekt-security, OWASP, or PIT** in this experimental
-  cut. Each is a named SKIP, not a silent pass.
-- **Property tests omitted** until a trust-reviewed Kotlin generator exists.
-  jqwik is denylisted (Anti-AI Usage Clause), matching the Java pack.
+- **No OWASP NVD store and no PIT** in this experimental cut. Those gates
+  stay named `SKIP_UNSUPPORTED`, not a silent pass. ArchUnit, Kover, detekt,
+  and Kotest property tests are wired.
+- jqwik is denylisted (Anti-AI Usage Clause), matching the Java pack.
 
 ## Workflows
 

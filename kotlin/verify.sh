@@ -75,6 +75,17 @@ run_package() {
   grep -q 'warehouse-ok ZZZ' <<<"${out}"
 }
 
+run_lock_integrity() {
+  if [[ ! -f gradle.lockfile ]]; then
+    printf 'gradle.lockfile missing; generate on JDK 21 with: gradle resolveAndLockAll --write-locks\n' >&2
+    return 1
+  fi
+  # Locking is enabled in build.gradle.kts; a resolve that disagrees with the
+  # committed lockfile fails. --offline proves the wrapper cache is enough
+  # after bootstrap in the same verify run.
+  gradle_bin dependencies --offline
+}
+
 run_unit() {
   gradle_bin unitTest
 }
@@ -106,9 +117,7 @@ for phase in "${phases[@]}"; do
       printf 'GATE dependency-vulnerability: SKIP_UNSUPPORTED(OWASP Dependency-Check needs a pinned NVD store; not faked)\n'
       ;;
     dependency-policy) gate dependency-policy gradle_bin dependencies ;;
-    lock-integrity)
-      printf 'GATE lock-integrity: SKIP_UNSUPPORTED(Gradle lockfiles need a JDK 21 writer; wrapper checksum is already pinned)\n'
-      ;;
+    lock-integrity) gate lock-integrity run_lock_integrity ;;
     negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation)
       printf 'GATE mutation: SKIP_UNSUPPORTED(PIT Kotlin bytecode mapping not yet fixture-proven)\n'

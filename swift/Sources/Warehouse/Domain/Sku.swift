@@ -21,18 +21,23 @@ public struct Sku: Equatable, Hashable, Sendable, CustomStringConvertible {
 }
 
 func trimAsciiEdges(_ code: String) -> String {
-  let edge: Set<Character> = [" ", "\t", "\r", "\n"]
-  var start = code.startIndex
-  var end = code.endIndex
-  while start < end, edge.contains(code[start]) {
-    start = code.index(after: start)
+  // Walk Unicode scalars, not Character. Swift treats U+000D U+000A as one
+  // grapheme cluster, which would skip CR/LF if we compared Character values.
+  func isEdge(_ scalar: Unicode.Scalar) -> Bool {
+    scalar == "\u{0020}" || scalar == "\u{0009}" || scalar == "\u{000D}" || scalar == "\u{000A}"
+  }
+  let scalars = code.unicodeScalars
+  var start = scalars.startIndex
+  var end = scalars.endIndex
+  while start < end, isEdge(scalars[start]) {
+    start = scalars.index(after: start)
   }
   while end > start {
-    let previous = code.index(before: end)
-    if !edge.contains(code[previous]) {
+    let previous = scalars.index(before: end)
+    if !isEdge(scalars[previous]) {
       break
     }
     end = previous
   }
-  return String(code[start..<end])
+  return String(scalars[start..<end])
 }

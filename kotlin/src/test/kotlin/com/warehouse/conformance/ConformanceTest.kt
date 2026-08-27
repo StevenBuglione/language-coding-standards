@@ -3,7 +3,6 @@ package com.warehouse.conformance
 import com.warehouse.domain.InvalidOrderException
 import com.warehouse.domain.Money
 import com.warehouse.domain.Order
-
 import com.warehouse.domain.OrderId
 import com.warehouse.domain.OrderLine
 import com.warehouse.domain.Quantity
@@ -48,7 +47,7 @@ class ConformanceTest {
             if (ok) {
                 assertEquals(
                     case.getJSONObject("expect").getJSONObject("result").getString("code"),
-                    Sku(code).code,
+                    Sku(code).code
                 )
             } else {
                 assertThrows(InvalidOrderException::class.java) { Sku(code) }
@@ -65,7 +64,7 @@ class ConformanceTest {
                 val qty = Quantity(raw.toString().toInt())
                 assertEquals(
                     case.getJSONObject("expect").getJSONObject("result").getString("value"),
-                    qty.value.toString(),
+                    qty.value.toString()
                 )
             } else if (raw is Boolean) {
                 // Kotlin Boolean is not Int; the vector still requires rejection.
@@ -129,7 +128,7 @@ class ConformanceTest {
             OrderLine(
                 sku = Sku(item.getString("sku")),
                 quantity = Quantity(item.getString("quantity").toInt()),
-                unitPrice = Money(price.getString("minorUnits").toLong(), price.getString("currency")),
+                unitPrice = Money(price.getString("minorUnits").toLong(), price.getString("currency"))
             )
         }
 

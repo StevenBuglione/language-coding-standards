@@ -10,7 +10,7 @@
 import PackageDescription
 
 let strictSettings: [SwiftSetting] = [
-  .unsafeFlags(["-warnings-as-errors"]),
+  .unsafeFlags(["-warnings-as-errors"])
 ]
 
 let package = Package(

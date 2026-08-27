@@ -9,13 +9,17 @@ struct PropertyTests {
       for right in amounts {
         let a = try Money(minorUnits: left, currency: "USD")
         let b = try Money(minorUnits: right, currency: "USD")
-        #expect(try a.add(b) == b.add(a))
+        let leftSum = try a.add(b)
+        let rightSum = try b.add(a)
+        #expect(leftSum == rightSum)
       }
     }
   }
 
   @Test func timesZeroIsZero() throws {
     let money = try Money(minorUnits: 300, currency: "EUR")
-    #expect(try money.times(0) == Money(minorUnits: 0, currency: "EUR"))
+    let scaled = try money.times(0)
+    let expected = try Money(minorUnits: 0, currency: "EUR")
+    #expect(scaled == expected)
   }
 }

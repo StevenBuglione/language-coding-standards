@@ -76,13 +76,24 @@ run_unit() {
   fi
 }
 
+run_asan() {
+  # Linux-only runtime sanitizer (Swift server guide). Thread sanitizer is a
+  # separate run because it is incompatible with ASan.
+  # LeakSanitizer reports ~144B from libXCTest/libswiftCore at process exit on
+  # this image; that is not Warehouse. Keep use-after-free/overflow detection.
+  ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0}" \
+    swift test --sanitize=address --filter PlaceOrderTests
+}
+
 run_package() {
   if ! swift build -c release; then
     printf 'swift build -c release failed\n' >&2
     return 1
   fi
-  local tmp
+  local tmp pkg_id
   tmp="$(mktemp -d)"
+  # SwiftPM identifies a path dependency by the directory name, not Package.swift's name.
+  pkg_id="$(basename "${PWD}")"
   mkdir -p "${tmp}/Consumer/Sources/Consumer"
   cat >"${tmp}/Consumer/Package.swift" <<EOF
 // swift-tools-version: 6.0
@@ -90,7 +101,7 @@ import PackageDescription
 let package = Package(
   name: "Consumer",
   dependencies: [.package(path: "${PWD}")],
-  targets: [.executableTarget(name: "Consumer", dependencies: [.product(name: "Warehouse", package: "Warehouse")])]
+  targets: [.executableTarget(name: "Consumer", dependencies: [.product(name: "Warehouse", package: "${pkg_id}")])]
 )
 EOF
   printf 'import Warehouse\n@main struct Run { static func main() { _ = try? Money(minorUnits: 0, currency: "ZZZ") } }\n' \
@@ -130,7 +141,7 @@ for phase in "${phases[@]}"; do
       printf 'GATE dead-code: SKIP_UNSUPPORTED(no unreachable-declaration detector wired yet)\n'
       ;;
     sast)
-      printf 'GATE sast: SKIP_UNSUPPORTED(no source-level security scanner wired yet)\n'
+      printf 'GATE sast: SKIP_UNSUPPORTED(CodeQL is the GitHub SAST; Linux ASan is VERIFY_TIER=full)\n'
       ;;
     dependency-vulnerability)
       printf 'GATE dependency-vulnerability: SKIP_UNSUPPORTED(no SwiftPM advisory scanner wired yet)\n'
@@ -153,3 +164,8 @@ for phase in "${phases[@]}"; do
       ;;
   esac
 done
+
+# Linux ASan is not mutation and not CodeQL. Run it only on the full tier.
+if [[ "${VERIFY_TIER:-}" == "full" ]]; then
+  gate sanitizers run_asan
+fi

@@ -122,7 +122,8 @@ private func suitesDir() throws -> URL {
   var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
   for _ in 0..<8 {
     let candidate = dir.appendingPathComponent("conformance/v2/suites")
-    if FileManager.default.isReadableFile(atPath: candidate.appendingPathComponent("money.json").path) {
+    let moneyJson = candidate.appendingPathComponent("money.json")
+    if FileManager.default.isReadableFile(atPath: moneyJson.path) {
       return candidate
     }
     dir.deleteLastPathComponent()

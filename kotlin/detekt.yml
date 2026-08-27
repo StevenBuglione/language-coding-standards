@@ -1,0 +1,11 @@
+build:
+  maxIssues: 0
+
+style:
+  # Domain constructors and Money.times fail-fast on each invariant.
+  # The default of 2 is too tight for that style.
+  ThrowsCount:
+    active: true
+    max: 5
+    excludeGuardClauses: true
+

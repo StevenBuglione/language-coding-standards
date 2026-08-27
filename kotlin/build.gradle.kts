@@ -39,6 +39,7 @@ dependencies {
 detekt {
     toolVersion = "1.23.8"
     buildUponDefaultConfig = true
+    config.setFrom(files("detekt.yml"))
     parallel = true
     source.setFrom("src/main/kotlin")
 }
@@ -57,6 +58,21 @@ kover {
                 }
             }
         }
+    }
+}
+
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+tasks.register("resolveAndLockAll") {
+    group = "verification"
+    description = "Resolve every resolvable configuration so --write-locks can snapshot them"
+    notCompatibleWithConfigurationCache("writes dependency lock state")
+    doLast {
+        configurations
+            .filter { it.isCanBeResolved }
+            .forEach { it.resolve() }
     }
 }
 

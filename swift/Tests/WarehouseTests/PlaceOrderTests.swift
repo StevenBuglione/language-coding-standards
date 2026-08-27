@@ -15,7 +15,9 @@ struct PlaceOrderTests {
     }
     #expect(order.status == .paid)
     #expect(order.id.value == "ord-1")
-    #expect(try order.total() == try usd(1000))
+    let total = try order.total()
+    let expected = try usd(1000)
+    #expect(total == expected)
     #expect(payments.chargedOrders.count == 1)
     let stored = repository.get(order.id)
     #expect(stored?.status == .paid)

@@ -19,7 +19,8 @@ struct MoneyTests {
 
   @Test func addSumsSameCurrency() throws {
     let sum = try usd(150).add(try usd(275))
-    #expect(sum == try usd(425))
+    let expected = try usd(425)
+    #expect(sum == expected)
   }
 
   @Test func addRejectsCurrencyMismatch() {
@@ -34,7 +35,9 @@ struct MoneyTests {
   }
 
   @Test func timesScalesAmount() throws {
-    #expect(try usd(250).times(3) == try usd(750))
+    let scaled = try usd(250).times(3)
+    let expected = try usd(750)
+    #expect(scaled == expected)
   }
 
   @Test func timesRejectsNegativeMultiplier() {
@@ -45,10 +48,9 @@ struct MoneyTests {
   }
 
   @Test func equalityIsValueBased() throws {
-    #expect(
-      try Money(minorUnits: 10, currency: "EUR")
-        == Money(minorUnits: 10, currency: "EUR")
-    )
+    let left = try Money(minorUnits: 10, currency: "EUR")
+    let right = try Money(minorUnits: 10, currency: "EUR")
+    #expect(left == right)
   }
 
   @Test func acceptsIsoStyleZzz() throws {
@@ -73,6 +75,8 @@ struct MoneyTests {
   }
 
   @Test func timesZeroIsZero() throws {
-    #expect(try usd(250).times(0) == try usd(0))
+    let scaled = try usd(250).times(0)
+    let expected = try usd(0)
+    #expect(scaled == expected)
   }
 }

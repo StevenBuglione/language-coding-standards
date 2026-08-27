@@ -43,15 +43,15 @@ and exits nonzero on the first `FAIL`. Experimental skips are `SKIP_UNSUPPORTED`
 | `unit` | `swift test --filter` domain + conformance + property | Zero executed tests is `FAIL`. |
 | `property` | seeded Money commutativity tests | No third-party generator. |
 | `integration` | `swift test --filter PlaceOrderTests` | Adapter-wired place-order. |
-| `package` | `swift build -c release` plus a path-dependent consumer package | Clean consumer `swift build`. |
+| `package` | `swift build -c release` plus a path-dependent consumer package | Consumer depends on the directory name (SwiftPM path-id), not `Package.swift`'s `name`. |
 | `coverage` | skip | `swift test --enable-code-coverage` floors not parsed. |
 | `dead-code` | skip | No unreachable-declaration detector. |
-| `sast` | skip | No source-level scanner. |
+| `sast` | skip | CodeQL is GitHub-hosted SAST, not in `swift:6.0`. Linux ASan is `VERIFY_TIER=full` (`GATE sanitizers`), not this capability. LeakSanitizer is off: the Swift/XCTest runtime leaks ~144B on this image. |
 | `dependency-vulnerability` | skip | No advisory source wired. |
 | `dependency-policy` | skip | No license/source policy tool. |
 | `lock-integrity` | `Package.resolved` present | Zero third-party pins; the file is the fingerprint. |
 | `negative-fixtures` | `bad_examples/assert.sh` | Compile fixture always; format fixture when the tool exists. |
-| `mutation` | skip | No trustworthy Swift mutator; do not simulate one. |
+| `mutation` | skip | No trustworthy Swift mutator; do not simulate one. ASan is not mutation. |
 | `conformance` | Swift Testing loads `conformance/v2/suites` | Money, quantity, SKU, order. |
 | `reproducibility` | skip | Two-clean-build comparison is WP7 root evidence. |
 

@@ -47,7 +47,7 @@ run_format() {
 
 tests_ran() {
   local output="$1"
-  grep -qE 'Test run with [1-9][0-9]* tests|Executed [1-9][0-9]* tests' <<<"${output}"
+  grep -qE 'Test run with [1-9][0-9]* tests?|Executed [1-9][0-9]* tests?' <<<"${output}"
 }
 
 run_tests() {

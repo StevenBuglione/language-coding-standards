@@ -1,0 +1,43 @@
+name: kotlin
+
+on:
+  push:
+    paths:
+      - "kotlin/**"
+      - ".github/workflows/kotlin.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
+  pull_request:
+    paths:
+      - "kotlin/**"
+      - ".github/workflows/kotlin.yml"
+      - ".github/workflows/reusable-verify.yml"
+      - "conformance/**"
+      - "docs/CONTRACTS.md"
+      - "docs/adr/**"
+      - "standards/**"
+      - "scripts/manifest.py"
+      - "scripts/verify-all.sh"
+      - "docker-compose.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/reusable-verify.yml
+    with:
+      language: kotlin
+      image: gradle:8.14-jdk21
+      timeout_minutes: 60

@@ -201,6 +201,20 @@ func TestMoneyTimesRejectsNegativeMultiplier(t *testing.T) {
 	}
 }
 
+type moneyOperation func() (domain.Money, error)
+
+func assertInvalidMoneyOperation(t *testing.T, operation moneyOperation) {
+	t.Helper()
+	got, err := operation()
+	if err == nil {
+		t.Fatalf("operation returned %+v, want error", got)
+	}
+	var invalid domain.InvalidOrder
+	if !errors.As(err, &invalid) {
+		t.Fatalf("operation error = %v, want wrapped domain.InvalidOrder", err)
+	}
+}
+
 // Arithmetic on minor units must never silently wrap: overflow against the
 // shared maximum or int64 is InvalidOrder, never a coerced amount.
 func TestMoneyArithmeticRejectsOverflow(t *testing.T) {
@@ -209,53 +223,40 @@ func TestMoneyArithmeticRejectsOverflow(t *testing.T) {
 	maxMoney := domain.MustMoney(domain.MoneyMinorUnitsMax, "USD")
 	oneCent := domain.MustMoney(1, "USD")
 	small := domain.MustMoney(2, "USD")
-
-	t.Run("addition overflow is invalid", func(t *testing.T) {
-		t.Parallel()
-		got, err := maxMoney.Add(oneCent)
-		if err == nil {
-			t.Fatalf("Add overflowed to %+v, want error", got)
-		}
-		var invalid domain.InvalidOrder
-		if !errors.As(err, &invalid) {
-			t.Fatalf("Add overflow error = %v, want wrapped domain.InvalidOrder", err)
-		}
-	})
-
-	t.Run("scaling past shared maximum is invalid", func(t *testing.T) {
-		t.Parallel()
-		got, err := maxMoney.Times(2)
-		if err == nil {
-			t.Fatalf("Times overflowed to %+v, want error", got)
-		}
-		var invalid domain.InvalidOrder
-		if !errors.As(err, &invalid) {
-			t.Fatalf("Times overflow error = %v, want wrapped domain.InvalidOrder", err)
-		}
-	})
-
-	t.Run("scaling that overflows int64 is invalid", func(t *testing.T) {
-		t.Parallel()
-		got, err := small.Times(math.MaxInt64)
-		if err == nil {
-			t.Fatalf("Times(2 * MaxInt64) = %+v, want error; wrapped product passed as valid money", got)
-		}
-		var invalid domain.InvalidOrder
-		if !errors.As(err, &invalid) {
-			t.Fatalf("Times int64 overflow error = %v, want wrapped domain.InvalidOrder", err)
-		}
-	})
-
-	t.Run("addition that overflows int64 is invalid", func(t *testing.T) {
-		t.Parallel()
-		huge := domain.Money{MinorUnits: math.MaxInt64, Currency: "USD"}
-		got, err := huge.Add(oneCent)
-		if err == nil {
-			t.Fatalf("Add(MaxInt64 + 1) = %+v, want error", got)
-		}
-		var invalid domain.InvalidOrder
-		if !errors.As(err, &invalid) {
-			t.Fatalf("Add int64 overflow error = %v, want wrapped domain.InvalidOrder", err)
-		}
-	})
+	tests := []struct {
+		name      string
+		operation moneyOperation
+	}{
+		{
+			name: "addition overflow is invalid",
+			operation: func() (domain.Money, error) {
+				return maxMoney.Add(oneCent)
+			},
+		},
+		{
+			name: "scaling past shared maximum is invalid",
+			operation: func() (domain.Money, error) {
+				return maxMoney.Times(2)
+			},
+		},
+		{
+			name: "scaling that overflows int64 is invalid",
+			operation: func() (domain.Money, error) {
+				return small.Times(math.MaxInt64)
+			},
+		},
+		{
+			name: "addition that overflows int64 is invalid",
+			operation: func() (domain.Money, error) {
+				huge := domain.Money{MinorUnits: math.MaxInt64, Currency: "USD"}
+				return huge.Add(oneCent)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertInvalidMoneyOperation(t, tt.operation)
+		})
+	}
 }

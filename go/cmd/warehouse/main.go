@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"warehouse/internal/adapters"
 	"warehouse/internal/application"
@@ -61,7 +62,7 @@ func run() error {
 		line.UnitPrice.MinorUnits,
 		total.MinorUnits,
 		total.Currency,
-		result.Order.Status().Label(),
+		strings.ToUpper(result.Order.Status().Label()),
 	)
 	return nil
 }

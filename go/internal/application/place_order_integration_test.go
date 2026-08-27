@@ -47,43 +47,58 @@ func orderLines(skus ...string) []domain.OrderLine {
 	return lines
 }
 
-func TestPlaceOrderHappyPath(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	stockSku := domain.MustSku("SKU-A")
-	p := newPipeline(map[domain.Sku]int64{stockSku: 5}, false)
-
-	result := p.useCase.Execute(ctx, orderLines("SKU-A"), "idem-1")
+func requireSuccessfulOrder(t *testing.T, result application.PlaceOrderResult) *domain.Order {
+	t.Helper()
 	if result.Failed() {
 		t.Fatalf("Execute failed: %v", result.Failure)
 	}
 	if result.Order == nil {
 		t.Fatal("success result carried nil order")
 	}
-	if got := result.Order.Status(); got != domain.StatusPaid {
+	return result.Order
+}
+
+func assertHappyPathOrder(t *testing.T, order *domain.Order) {
+	t.Helper()
+	if got := order.Status(); got != domain.StatusPaid {
 		t.Fatalf("persisted status = %s, want paid", got.Label())
 	}
-	if result.Order.Version() != 1 {
-		t.Fatalf("persisted version = %d, want 1", result.Order.Version())
+	if order.Version() != 1 {
+		t.Fatalf("persisted version = %d, want 1", order.Version())
 	}
-	if result.Order.ID().Value != "ord-1" {
-		t.Fatalf("id = %q, want injected ord-1", result.Order.ID().Value)
+	if order.ID().Value != "ord-1" {
+		t.Fatalf("id = %q, want injected ord-1", order.ID().Value)
 	}
-	stored, ok := p.repository.Get(ctx, result.Order.ID())
-	if !ok {
+}
+
+func requireStoredOrder(
+	t *testing.T,
+	ctx context.Context,
+	repository *adapters.InMemoryOrderRepository,
+	id domain.OrderID,
+) *domain.Order {
+	t.Helper()
+	stored, ok := repository.Get(ctx, id)
+	if !ok || stored == nil {
 		t.Fatal("repository did not persist the order")
 	}
-	if stored.Status() != domain.StatusPaid {
-		t.Fatalf("stored status = %s, want paid", stored.Status().Label())
-	}
+	return stored
+}
+
+func assertHappyPathSideEffects(t *testing.T, p *pipeline) {
+	t.Helper()
 	if len(p.payments.Charges()) != 1 {
 		t.Fatalf("payment attempts = %d, want 1", len(p.payments.Charges()))
 	}
+	stockSku := domain.MustSku("SKU-A")
 	if p.inventory.SnapshotStock()[stockSku] != 3 {
 		t.Fatalf("remaining stock = %d, want 3", p.inventory.SnapshotStock()[stockSku])
 	}
-	total, err := stored.Total()
+}
+
+func assertOrderTotal(t *testing.T, order *domain.Order) {
+	t.Helper()
+	total, err := order.Total()
 	if err != nil {
 		t.Fatalf("Total returned error: %v", err)
 	}
@@ -91,6 +106,24 @@ func TestPlaceOrderHappyPath(t *testing.T) {
 	if total != want {
 		t.Fatalf("total = %+v, want %+v", total, want)
 	}
+}
+
+func TestPlaceOrderHappyPath(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stockSku := domain.MustSku("SKU-A")
+	p := newPipeline(map[domain.Sku]int64{stockSku: 5}, false)
+
+	order := requireSuccessfulOrder(
+		t,
+		p.useCase.Execute(ctx, orderLines("SKU-A"), "idem-1"),
+	)
+	assertHappyPathOrder(t, order)
+	stored := requireStoredOrder(t, ctx, p.repository, order.ID())
+	assertHappyPathOrder(t, stored)
+	assertHappyPathSideEffects(t, p)
+	assertOrderTotal(t, stored)
 }
 
 func TestPlaceOrderFailurePaths(t *testing.T) {

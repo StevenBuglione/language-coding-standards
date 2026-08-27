@@ -32,10 +32,18 @@ func TestMustConstructorsPanicOnInvalidInput(t *testing.T) {
 			act:  func() { domain.MustSku("   ") },
 		},
 		{
+			name: "MustOrderID rejects empty id",
+			act:  func() { domain.MustOrderID("  ") },
+		},
+		{
 			name: "MustOrderLine rejects zero quantity",
 			act: func() {
 				domain.MustOrderLine(domain.MustSku("SKU-A"), domain.Quantity(0), domain.MustMoney(1, "USD"))
 			},
+		},
+		{
+			name: "MustOrder rejects empty lines",
+			act:  func() { domain.MustOrder(nil, domain.MustOrderID("ord-1")) },
 		},
 	}
 	for _, tt := range tests {

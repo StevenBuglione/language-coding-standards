@@ -1,10 +1,8 @@
 package domain
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"time"
+	"strings"
 )
 
 // OrderStatus is the state machine NEW -> PAID -> SHIPPED.
@@ -32,18 +30,31 @@ func (s OrderStatus) Label() string {
 	return "unknown"
 }
 
-// OrderID uniquely identifies a placed order.
+// OrderID uniquely identifies a placed order. The domain stores an injected
+// identifier; it does not read randomness or wall-clock time.
 type OrderID struct {
 	Value string
 }
 
-// NewOrderID mints a random 128-bit hexadecimal identifier.
-func NewOrderID() (OrderID, error) {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return OrderID{}, fmt.Errorf("new order id: %w", err)
+// NewOrderID validates a non-empty identifier supplied by the application.
+func NewOrderID(value string) (OrderID, error) {
+	if strings.TrimSpace(value) == "" {
+		return OrderID{}, fmt.Errorf(
+			"new order id: %w",
+			InvalidOrder{Reason: "order id must be non-empty"},
+		)
 	}
-	return OrderID{Value: hex.EncodeToString(buf)}, nil
+	return OrderID{Value: value}, nil
+}
+
+// MustOrderID is NewOrderID for infallible literals; it panics on violation
+// and is intended for tests and wiring code with compile-time-known inputs.
+func MustOrderID(value string) OrderID {
+	id, err := NewOrderID(value)
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 // OrderLine is one SKU/quantity/unit-price row of an order.
@@ -96,22 +107,25 @@ func (l OrderLine) LineTotal() (Money, error) {
 	return total, nil
 }
 
-// Order is the aggregate root enforcing the four canonical invariants:
-// at least one line; no duplicate SKUs across lines; the total always equals
-// the sum of line totals (computed on demand, never stored stale); and no
-// mutation once shipped. All lines must share one currency so the total is
-// well-defined.
+// Order is the aggregate root enforcing the canonical invariants:
+// injected id; at least one line; no duplicate normalized SKUs; a single
+// currency at construction; the total always equals the checked sum of line
+// totals (computed on demand, never stored stale); only NEW -> PAID ->
+// SHIPPED is legal; optimistic version starts at 0.
 type Order struct {
-	id       OrderID
-	status   OrderStatus
-	lines    []OrderLine
-	placedAt time.Time
+	id      OrderID
+	status  OrderStatus
+	lines   []OrderLine
+	version int
 }
 
-// NewOrder places a new order from validated lines, assigning a fresh id and
-// the caller-supplied placement instant. The lines are copied: later edits to
-// the slice never leak into the order.
-func NewOrder(lines []OrderLine, placedAt time.Time) (*Order, error) {
+// NewOrder places a new order from validated lines and an injected id.
+// Mixed currencies are rejected at construction. The lines are copied: later
+// edits to the slice never leak into the order.
+func NewOrder(lines []OrderLine, id OrderID) (*Order, error) {
+	if _, err := NewOrderID(id.Value); err != nil {
+		return nil, fmt.Errorf("new order: %w", err)
+	}
 	if len(lines) == 0 {
 		return nil, fmt.Errorf(
 			"new order: %w",
@@ -131,17 +145,23 @@ func NewOrder(lines []OrderLine, placedAt time.Time) (*Order, error) {
 		if line.UnitPrice.Currency != currency {
 			return nil, fmt.Errorf(
 				"new order: %w",
-				InvalidOrder{Reason: fmt.Sprintf("order lines must share one currency, got %s vs %s", currency, line.UnitPrice.Currency)},
+				InvalidOrder{Reason: "mixed currencies are not allowed"},
 			)
 		}
 	}
-	id, err := NewOrderID()
-	if err != nil {
-		return nil, fmt.Errorf("new order: %w", err)
-	}
 	stored := make([]OrderLine, len(lines))
 	copy(stored, lines)
-	return &Order{id: id, status: StatusNew, lines: stored, placedAt: placedAt}, nil
+	return &Order{id: id, status: StatusNew, lines: stored, version: 0}, nil
+}
+
+// MustOrder is NewOrder for infallible literals; it panics on violation and
+// is intended for tests and wiring code with known-good parts.
+func MustOrder(lines []OrderLine, id OrderID) *Order {
+	order, err := NewOrder(lines, id)
+	if err != nil {
+		panic(err)
+	}
+	return order
 }
 
 // ID returns the immutable order identifier.
@@ -154,9 +174,9 @@ func (o *Order) Status() OrderStatus {
 	return o.status
 }
 
-// PlacedAt returns the instant the caller supplied at construction.
-func (o *Order) PlacedAt() time.Time {
-	return o.placedAt
+// Version returns the optimistic concurrency version.
+func (o *Order) Version() int {
+	return o.version
 }
 
 // Lines returns a copy of the order lines; mutating it never affects the order.
@@ -214,4 +234,16 @@ func (o *Order) Ship() error {
 	}
 	o.status = StatusShipped
 	return nil
+}
+
+// BumpVersion increments the optimistic version after a successful save.
+func (o *Order) BumpVersion() {
+	o.version++
+}
+
+// Snapshot returns a detached copy so repositories cannot alias stored state.
+func (o *Order) Snapshot() *Order {
+	stored := make([]OrderLine, len(o.lines))
+	copy(stored, o.lines)
+	return &Order{id: o.id, status: o.status, lines: stored, version: o.version}
 }

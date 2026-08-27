@@ -31,14 +31,19 @@ func run() error {
 	})
 	payments := adapters.NewFakePaymentProcessor(false)
 	orders := adapters.NewInMemoryOrderRepository()
-	useCase := application.NewPlaceOrderUseCase(inventory, payments, orders, adapters.RealClock{})
+	useCase := application.NewPlaceOrderUseCase(
+		inventory,
+		payments,
+		orders,
+		adapters.NewSequenceOrderIDGenerator(),
+	)
 
 	line := domain.MustOrderLine(
 		domain.MustSku("SKU-1000"),
 		domain.MustQuantity(2),
 		domain.MustMoney(1999, "USD"),
 	)
-	result := useCase.Execute(ctx, []domain.OrderLine{line})
+	result := useCase.Execute(ctx, []domain.OrderLine{line}, "demo-1")
 	if result.Failed() {
 		return fmt.Errorf("demo run failed: %w", result.Failure)
 	}
@@ -49,13 +54,14 @@ func run() error {
 	// Demo stdout report; a failed print must not fail the demo run.
 	_, _ = fmt.Fprintf(
 		os.Stdout,
-		"placed order %s: %d x %s @ %d minor units = %d %s\n",
+		"placed order %s: %d x %s @ %d minor units = %d %s (%s)\n",
 		result.Order.ID().Value,
 		int64(line.Quantity),
 		string(line.SKU),
 		line.UnitPrice.MinorUnits,
 		total.MinorUnits,
 		total.Currency,
+		result.Order.Status().Label(),
 	)
 	return nil
 }

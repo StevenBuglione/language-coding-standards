@@ -179,7 +179,7 @@ only)` unless `VERIFY_TIER=full`.
 | nestif `min-complexity` | 4 | flat guards over pyramids | occasionally forces early returns mid-function |
 | coverage measured baseline | **96.0%** of statements across `./internal/...` (first green run) | reference point for R3 floor | remaining 4% are provably-unreachable defensive branches — see below |
 | coverage floor | **92** (= floor(96 − 4), ≥ 80 floor) | R3 buffer absorbs small refactors without licensing gaps | new branches need tests within ~4 points of landing |
-| uncovered-by-construction | Label's closed-enum tail return; NewOrderID's crypto/rand failure branch; Order.Total's propagate-error branches; MustOrderLine panic guard (partially reachable) | defensive code behind injected randomness or a closed enum cannot be exercised without lying in tests | accepted 4%; revisited if the domain grows injectable failure modes |
+| uncovered-by-construction | Label's closed-enum tail return; Order.Total's propagate-error branches; Must* panic guards; Pay-after-charge defensive compensate | a closed enum and constructor panics cannot be exercised without lying in tests | accepted 4%; revisited if the domain grows injectable failure modes |
 | exhaustive `default-signifies-exhaustive` | false | a default case must not become a loophole for forgetting new enum members | adding a state forces touching every switch |
 | exhaustruct_v5 scope | domain structs + application.PlaceOrderResult | field completeness is the contract where values ARE the data; wiring structs stay free-form | new domain structs demand complete literals everywhere |
 | TODO/FIXME grep scope | `internal` + `cmd` only | unfinished-work markers rot silently; bad_examples needs markers for its own fixture | none — production scope is exactly what should be clean |
@@ -206,18 +206,12 @@ oversight.
   already possess. (mockgen itself was archived by golang in 2023 and lives
   on as the community uber fork — unnecessary here.) No mocking framework
   appears anywhere in this template.
-- **Failure payloads beyond the three named domain errors — CONTRACTS
-  tension called out explicitly.** CONTRACTS §2 says a place-order failure
-  carries exactly one of `InsufficientStock` / `InvalidOrder` /
-  `OrderAlreadyShipped`. This template honors that for every domain-rule
-  outcome: stock shortages wrap InsufficientStock, payment declines map to
-  InvalidOrder (a declined collection is refused by domain rules), illegal
-  transitions wrap InvalidOrder or OrderAlreadyShipped. But Execute's
-  persist branch wraps whatever the repository returned — an infrastructure
-  fault that is none of the three — rather than mislabeling an outage as an
-  invalid order. Callers recover the three contract errors with errors.As;
-  anything else surfacing from PlaceOrderResult.Failure is, by construction,
-  not a domain verdict.
+- **Typed v2 failures, recovered with errors.As.** Place-order wraps
+  `InvalidOrder`, `InsufficientStock`, `PaymentDeclined`,
+  `PersistenceConflict`, and `CompensationFailure`. Charge decline is
+  `PaymentDeclined`, never `InvalidOrder`. Callers recover the typed
+  values with errors.As; a compensation failure after refund/release
+  itself failed is not remapped to the original persist error.
 - **maintidx, gocyclo: skipped** — duplicate lenses over the same code with
   cyclop+gocognit already enforcing structure; three complexity tools buy
   noise, not safety. **NilAway: not bundleable** as a golangci plugin in the

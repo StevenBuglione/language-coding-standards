@@ -2,40 +2,106 @@ package adapters
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"warehouse/internal/application"
 	"warehouse/internal/domain"
 )
 
+type idempotencyRecord struct {
+	fingerprint string
+	order       *domain.Order
+}
+
 // InMemoryOrderRepository is an application.OrderRepository double keeping
-// orders in a map keyed by immutable order id.
+// snapshots keyed by immutable order id. Saves use compare-and-set versions
+// and never expose a mutable alias to stored state.
 type InMemoryOrderRepository struct {
-	orders map[domain.OrderID]*domain.Order
-	saved  []*domain.Order
+	mu       sync.Mutex
+	orders   map[domain.OrderID]*domain.Order
+	saved    []*domain.Order
+	byKey    map[string]idempotencyRecord
+	FailSave bool
 }
 
 // NewInMemoryOrderRepository starts with an empty store.
 func NewInMemoryOrderRepository() *InMemoryOrderRepository {
-	return &InMemoryOrderRepository{orders: make(map[domain.OrderID]*domain.Order)}
+	return &InMemoryOrderRepository{
+		orders: make(map[domain.OrderID]*domain.Order),
+		byKey:  make(map[string]idempotencyRecord),
+	}
 }
 
-// Saved returns every persisted order, in save order, for test assertions.
+// Saved returns every persisted snapshot, in save order, for test assertions.
 func (r *InMemoryOrderRepository) Saved() []*domain.Order {
-	return r.saved
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*domain.Order, len(r.saved))
+	copy(out, r.saved)
+	return out
 }
 
-// Save stores the order under its id and returns it as persisted.
-func (r *InMemoryOrderRepository) Save(_ context.Context, order *domain.Order) (*domain.Order, error) {
-	r.orders[order.ID()] = order
-	r.saved = append(r.saved, order)
-	return order, nil
+// Save stores a snapshot under compare-and-set version rules and returns a
+// detached copy. A lost race wraps domain.PersistenceConflict.
+func (r *InMemoryOrderRepository) Save(_ context.Context, order *domain.Order, expectedVersion int) (*domain.Order, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.FailSave {
+		return nil, fmt.Errorf(
+			"save order: %w",
+			domain.PersistenceConflict{Reason: fmt.Sprintf("forced save failure for %s", order.ID().Value)},
+		)
+	}
+	currentVersion := 0
+	if current, ok := r.orders[order.ID()]; ok {
+		currentVersion = current.Version()
+	}
+	if currentVersion != expectedVersion {
+		return nil, fmt.Errorf(
+			"save order: %w",
+			domain.PersistenceConflict{Reason: fmt.Sprintf(
+				"version conflict for %s: expected %d, stored %d",
+				order.ID().Value, expectedVersion, currentVersion,
+			)},
+		)
+	}
+	snapshot := order.Snapshot()
+	snapshot.BumpVersion()
+	r.orders[order.ID()] = snapshot
+	r.saved = append(r.saved, snapshot.Snapshot())
+	return snapshot.Snapshot(), nil
 }
 
-// Get returns the stored order and true, or nil and false; an unknown id
+// Get returns a stored snapshot and true, or nil and false; an unknown id
 // never raises.
 func (r *InMemoryOrderRepository) Get(_ context.Context, id domain.OrderID) (*domain.Order, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	order, ok := r.orders[id]
-	return order, ok
+	if !ok {
+		return nil, false
+	}
+	return order.Snapshot(), true
+}
+
+// GetByIdempotencyKey returns the fingerprint and snapshot for a previous
+// successful command.
+func (r *InMemoryOrderRepository) GetByIdempotencyKey(_ context.Context, key string) (string, *domain.Order, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	record, ok := r.byKey[key]
+	if !ok {
+		return "", nil, false
+	}
+	return record.fingerprint, record.order.Snapshot(), true
+}
+
+// RememberIdempotency records a successful command so retries can replay.
+func (r *InMemoryOrderRepository) RememberIdempotency(_ context.Context, key, fingerprint string, order *domain.Order) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byKey[key] = idempotencyRecord{fingerprint: fingerprint, order: order.Snapshot()}
 }
 
 // compile-time proof that the adapter satisfies its port.

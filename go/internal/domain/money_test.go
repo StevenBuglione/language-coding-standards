@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -20,6 +21,8 @@ func TestNewMoneyAcceptsValidAmounts(t *testing.T) {
 		{name: "zero usd", minorUnits: 0, currency: "USD", want: domain.Money{MinorUnits: 0, Currency: "USD"}},
 		{name: "one cent", minorUnits: 1, currency: "EUR", want: domain.Money{MinorUnits: 1, Currency: "EUR"}},
 		{name: "large amount", minorUnits: 999999999999, currency: "GBP", want: domain.Money{MinorUnits: 999999999999, Currency: "GBP"}},
+		{name: "shared maximum", minorUnits: domain.MoneyMinorUnitsMax, currency: "USD", want: domain.Money{MinorUnits: domain.MoneyMinorUnitsMax, Currency: "USD"}},
+		{name: "iso-style zzz", minorUnits: 0, currency: "ZZZ", want: domain.Money{MinorUnits: 0, Currency: "ZZZ"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -48,6 +51,7 @@ func TestNewMoneyRejectsInvalidValues(t *testing.T) {
 		{name: "two-letter currency", minorUnits: 5, currency: "US"},
 		{name: "four-letter currency", minorUnits: 5, currency: "USDD"},
 		{name: "empty currency", minorUnits: 5, currency: ""},
+		{name: "above shared maximum", minorUnits: domain.MoneyMinorUnitsMax + 1, currency: "USD"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -197,17 +201,14 @@ func TestMoneyTimesRejectsNegativeMultiplier(t *testing.T) {
 	}
 }
 
-// Arithmetic on minor units must never silently wrap around int64: an
-// overflow leaves the non-negative-amount invariant unenforceable, so both
-// operations report it as an invalid order instead.
-func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
+// Arithmetic on minor units must never silently wrap: overflow against the
+// shared maximum or int64 is InvalidOrder, never a coerced amount.
+func TestMoneyArithmeticRejectsOverflow(t *testing.T) {
 	t.Parallel()
 
-	maxMoney := domain.MustMoney(9223372036854775807, "USD")
+	maxMoney := domain.MustMoney(domain.MoneyMinorUnitsMax, "USD")
 	oneCent := domain.MustMoney(1, "USD")
-	// 2^62 scaled by 5 wraps mod 2^64 back to exactly 2^62: a POSITIVE value
-	// that would pass the non-negative check and masquerade as valid money.
-	wrapsBackPositive := domain.MustMoney(4611686018427387904, "USD")
+	small := domain.MustMoney(2, "USD")
 
 	t.Run("addition overflow is invalid", func(t *testing.T) {
 		t.Parallel()
@@ -221,7 +222,7 @@ func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
 		}
 	})
 
-	t.Run("scaling into negative range is invalid", func(t *testing.T) {
+	t.Run("scaling past shared maximum is invalid", func(t *testing.T) {
 		t.Parallel()
 		got, err := maxMoney.Times(2)
 		if err == nil {
@@ -233,15 +234,28 @@ func TestMoneyArithmeticRejectsInt64Overflow(t *testing.T) {
 		}
 	})
 
-	t.Run("scaling that wraps back positive is invalid", func(t *testing.T) {
+	t.Run("scaling that overflows int64 is invalid", func(t *testing.T) {
 		t.Parallel()
-		got, err := wrapsBackPositive.Times(5)
+		got, err := small.Times(math.MaxInt64)
 		if err == nil {
-			t.Fatalf("Times(2^62 * 5) = %+v, want error; wrapped product passed as valid money", got)
+			t.Fatalf("Times(2 * MaxInt64) = %+v, want error; wrapped product passed as valid money", got)
 		}
 		var invalid domain.InvalidOrder
 		if !errors.As(err, &invalid) {
-			t.Fatalf("Times wrap-back-positive error = %v, want wrapped domain.InvalidOrder", err)
+			t.Fatalf("Times int64 overflow error = %v, want wrapped domain.InvalidOrder", err)
+		}
+	})
+
+	t.Run("addition that overflows int64 is invalid", func(t *testing.T) {
+		t.Parallel()
+		huge := domain.Money{MinorUnits: math.MaxInt64, Currency: "USD"}
+		got, err := huge.Add(oneCent)
+		if err == nil {
+			t.Fatalf("Add(MaxInt64 + 1) = %+v, want error", got)
+		}
+		var invalid domain.InvalidOrder
+		if !errors.As(err, &invalid) {
+			t.Fatalf("Add int64 overflow error = %v, want wrapped domain.InvalidOrder", err)
 		}
 	})
 }

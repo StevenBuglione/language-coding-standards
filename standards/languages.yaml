@@ -176,27 +176,31 @@
     },
     "kotlin": {
       "displayName": "Kotlin",
-      "state": "planned",
+      "state": "experimental",
       "folder": "kotlin",
-      "verifier": null,
-      "workflow": null,
-      "dockerfile": null,
-      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "verifier": "kotlin/verify.sh",
+      "workflow": ".github/workflows/kotlin.yml",
+      "dockerfile": "kotlin/Dockerfile",
+      "spec": "kotlin/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "TBD (Kotlin + Gradle wrapper)",
+      "toolchain": "Kotlin 2.1.20 + Gradle 8.14 + JDK 21",
       "composeService": null,
       "artifact": "jar",
       "os": ["linux"],
+      "inDefault": false,
       "image": {
-        "repository": "eclipse-temurin",
-        "tag": null,
+        "repository": "gradle",
+        "tag": "8.14-jdk21",
         "digest": null
       },
-      "propertyTesting": "kotest property or reviewed equivalent",
-      "architecture": "ArchUnit",
-      "sast": "detekt",
-      "dependencyVulnerability": "gradle dependency verification + OWASP",
-      "requiredCapabilities": []
+      "propertyTesting": "pending (jqwik denylisted; kotest property not yet wired)",
+      "architecture": "pending ArchUnit",
+      "sast": "pending detekt",
+      "dependencyVulnerability": "pending",
+      "requiredCapabilities": [
+        "bootstrap", "format", "lint", "compile",
+        "unit", "integration", "package", "negative-fixtures"
+      ]
     },
     "swift": {
       "displayName": "Swift",

@@ -3,21 +3,19 @@ package com.warehouse.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Currency;
-import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Money invariant tests: non-negativity, currency safety, scaling. */
+/** Money invariant tests: non-negativity, ISO-style currency, overflow, scaling. */
 class MoneyTest {
 
-  private static final Currency USD = Currency.getInstance(Locale.US);
-  private static final Currency EUR = Currency.getInstance("EUR");
+  private static final String USD = "USD";
+  private static final String EUR = "EUR";
 
   @ParameterizedTest
-  @ValueSource(ints = {-1, -500})
-  void rejectsNegativeAmounts(int negative) {
+  @ValueSource(longs = {-1, -500})
+  void rejectsNegativeAmounts(long negative) {
     assertThatThrownBy(() -> new Money(negative, USD))
         .isInstanceOf(InvalidOrderException.class)
         .hasMessageContaining("non-negative");
@@ -27,6 +25,27 @@ class MoneyTest {
   void acceptsZeroAndPositiveAmounts() {
     assertThat(new Money(0, USD).minorUnits()).isZero();
     assertThat(new Money(1000, USD).minorUnits()).isEqualTo(1000);
+  }
+
+  @Test
+  void acceptsSharedMaximumAndIsoStyleZzz() {
+    assertThat(new Money(Money.MAX_MINOR_UNITS, USD).minorUnits()).isEqualTo(Money.MAX_MINOR_UNITS);
+    assertThat(new Money(0, "ZZZ").currency()).isEqualTo("ZZZ");
+  }
+
+  @Test
+  void rejectsAmountAboveSharedMaximum() {
+    assertThatThrownBy(() -> new Money(Money.MAX_MINOR_UNITS + 1, USD))
+        .isInstanceOf(InvalidOrderException.class)
+        .hasMessageContaining("exceeds");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"usd", "US", "USDD", "", "US1"})
+  void rejectsMalformedCurrency(String currency) {
+    assertThatThrownBy(() -> new Money(1, currency))
+        .isInstanceOf(InvalidOrderException.class)
+        .hasMessageContaining("currency");
   }
 
   @Test
@@ -45,6 +64,14 @@ class MoneyTest {
   }
 
   @Test
+  void addRejectsOverflowOfSharedMaximum() {
+    var max = new Money(Money.MAX_MINOR_UNITS, USD);
+    assertThatThrownBy(() -> max.add(new Money(1, USD)))
+        .isInstanceOf(InvalidOrderException.class)
+        .hasMessageContaining("overflows");
+  }
+
+  @Test
   void scalesByNonNegativeMultiplier() {
     var scaled = new Money(250, USD).times(4);
     assertThat(scaled).isEqualTo(new Money(1000, USD));
@@ -56,6 +83,22 @@ class MoneyTest {
     assertThatThrownBy(() -> new Money(250, USD).times(-2))
         .isInstanceOf(InvalidOrderException.class)
         .hasMessageContaining("non-negative");
+  }
+
+  @Test
+  void timesRejectsOverflowOfSharedMaximum() {
+    var max = new Money(Money.MAX_MINOR_UNITS, USD);
+    assertThatThrownBy(() -> max.times(2))
+        .isInstanceOf(InvalidOrderException.class)
+        .hasMessageContaining("overflows");
+  }
+
+  @Test
+  void timesRejectsLongOverflowAsInvalidOrder() {
+    var max = new Money(Money.MAX_MINOR_UNITS, USD);
+    assertThatThrownBy(() -> max.times(Integer.MAX_VALUE))
+        .isInstanceOf(InvalidOrderException.class)
+        .hasMessageContaining("overflows");
   }
 
   @Test

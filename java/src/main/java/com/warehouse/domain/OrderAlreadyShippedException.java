@@ -8,7 +8,7 @@ import java.io.Serial;
  * <p>Internal signaling only: shipped orders are terminal, and every legal pipeline keeps this from
  * escaping the use case.
  */
-public final class OrderAlreadyShipedException extends RuntimeException {
+public final class OrderAlreadyShippedException extends RuntimeException {
 
   @Serial private static final long serialVersionUID = 1L;
 
@@ -17,7 +17,7 @@ public final class OrderAlreadyShipedException extends RuntimeException {
    *
    * @param message which order was mutated after shipping
    */
-  public OrderAlreadyShipedException(String message) {
+  public OrderAlreadyShippedException(String message) {
     super(message);
   }
 }

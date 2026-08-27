@@ -1,10 +1,20 @@
 package com.warehouse.domain;
 
-import java.util.UUID;
-
 /**
- * Immutable unique identifier of an order.
+ * Immutable unique identifier of an order, injected by the application.
  *
- * @param value the underlying universally unique identifier
+ * @param value non-blank identifier; never generated inside the domain
  */
-public record OrderId(UUID value) {}
+public record OrderId(String value) {
+
+  /**
+   * Rejects empty or whitespace-only identifiers.
+   *
+   * @throws InvalidOrderException when {@code value} is blank
+   */
+  public OrderId {
+    if (value.isBlank()) {
+      throw new InvalidOrderException("order id must be non-empty");
+    }
+  }
+}

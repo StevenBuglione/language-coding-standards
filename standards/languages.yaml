@@ -204,27 +204,30 @@
     },
     "swift": {
       "displayName": "Swift",
-      "state": "planned",
+      "state": "experimental",
       "folder": "swift",
-      "verifier": null,
-      "workflow": null,
-      "dockerfile": null,
-      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "verifier": "swift/verify.sh",
+      "workflow": ".github/workflows/swift.yml",
+      "dockerfile": "swift/Dockerfile",
+      "spec": "swift/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "TBD (SwiftPM)",
+      "toolchain": "Swift 6.0 (SwiftPM)",
       "composeService": null,
       "artifact": "swiftpm library",
       "os": ["linux"],
       "image": {
         "repository": "swift",
-        "tag": null,
+        "tag": "6.0",
         "digest": null
       },
-      "propertyTesting": "Swift Testing / swift-check",
-      "architecture": "package target boundaries",
-      "sast": "SwiftPM warnings-as-errors + sanitizers",
-      "dependencyVulnerability": "SwiftPM package security",
-      "requiredCapabilities": []
+      "propertyTesting": "pending (Swift Testing examples only)",
+      "architecture": "pending (single library target)",
+      "sast": "pending",
+      "dependencyVulnerability": "pending",
+      "requiredCapabilities": [
+        "bootstrap", "compile", "unit", "package", "negative-fixtures"
+      ],
+      "inDefault": false
     }
   }
 }

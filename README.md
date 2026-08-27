@@ -1,66 +1,79 @@
-# language-coding-standards
+# Language Coding Standards
 
-Opinionated, CI-enforced project templates — one folder per language, sharing
-one canonical example domain and one mental model. GitHub Actions is a forcing
-function: if generated code fails a gate, the agent must refactor until green.
+Opinionated, executable language templates for teaching coding agents to build
+small, typed, modular systems without claiming that a green formatter is proof
+of production quality.
 
-This repository is **not reference-grade yet**. Implemented packs are
-`experimental`. Planned languages are excluded from default verification.
-See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) and [docs/CONTRACTS.md](docs/CONTRACTS.md).
+> **Status:** every language pack is still `experimental`. A green workflow
+> means the implemented gates passed; it does not make a pack reference-grade.
+> Read [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) and
+> [AGENT_HANDOFF-v2.md](AGENT_HANDOFF-v2.md) before promoting or copying a pack.
 
-Language state comes from [`standards/languages.yaml`](standards/languages.yaml)
-(`planned` → `experimental` → `candidate` → `reference`). A green workflow
-alone does not make a pack `reference`.
+## What this repository proves
+
+Each language implements the same warehouse-order domain and exposes a
+canonical `verify.sh` capability runner. The shared behavior contract is
+[docs/CONTRACTS.md](docs/CONTRACTS.md); machine-readable vectors live under
+`conformance/v2/`.
+
+The root manifest, `standards/languages.yaml`, is executable policy. Meta CI
+checks every implemented pack against its verifier, capability vocabulary,
+Dockerfile image, workflow image, and compose service. It must not become a
+hand-maintained status brochure again.
 
 ## Languages
 
-| Language | Folder | State | Spec |
-| --- | --- | --- | --- |
-| Go | [`go/`](./go) | experimental | [`go/LANG_SPEC.md`](./go/LANG_SPEC.md) |
-| Java | [`java/`](./java) | experimental | [`java/LANG_SPEC.md`](./java/LANG_SPEC.md) |
-| Python | [`python/`](./python) | experimental | [`python/LANG_SPEC.md`](./python/LANG_SPEC.md) |
-| Rust | [`rust/`](./rust) | experimental | [`rust/LANG_SPEC.md`](./rust/LANG_SPEC.md) |
-| TypeScript | [`typescript/`](./typescript) | experimental | [`typescript/LANG_SPEC.md`](./typescript/LANG_SPEC.md) |
-| C# | [`csharp/`](./csharp) | experimental (not in default verify) | [`csharp/LANG_SPEC.md`](./csharp/LANG_SPEC.md) |
-| Kotlin | [`kotlin/`](./kotlin) | experimental (not in default verify) | [`kotlin/LANG_SPEC.md`](./kotlin/LANG_SPEC.md) |
-| Swift | [`swift/`](./swift) | experimental (not in default verify) | [`swift/LANG_SPEC.md`](./swift/LANG_SPEC.md) |
+The default root verification set is:
 
-Default `scripts/verify-all.sh` selects the five experimental packs. It does
-not build C#, Kotlin, or Swift.
+- Go
+- Java
+- Python
+- Rust
+- TypeScript
 
-## Capabilities
+C#, Kotlin, and Swift are implemented experimental packs but are deliberately
+excluded from the default root set. Their individual workflows still run when
+relevant shared or language files change.
 
-Gates are named capabilities (`compile`, `unit`, `property`, `sast`,
-`dependency-vulnerability`, `conformance`, …), not a one-size-fits-all
-`security` / `deadcode` / `test` slot. A no-op cannot report `PASS`.
-See [docs/CONTRACTS.md](docs/CONTRACTS.md) and
-[ADR-001](docs/adr/001-capability-vocabulary.md).
-
-Shared behavior is defined by [`conformance/v2/`](conformance/v2/). Current
-implementations fail those vectors until the domain workflow is corrected
-(successful placement must persist `PAID`).
-
-## Why
-
-- **CI is a forcing function, not a substitute for a domain contract.** See
-  [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
-- **Gates must prove they bite.** Negative fixtures belong to a named
-  capability. See [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
-- **One mental model, language-native idioms.** Same outcomes, not identical
-  syntax. See [docs/CONTRACTS.md](docs/CONTRACTS.md).
-
-## Quickstart
+## Run locally
 
 ```bash
-python conformance/v2/validate.py
-python scripts/manifest.py --list
+# Validate the manifest against all implemented packs.
+python3 scripts/manifest.py --check
+
+# Show the default language selection.
+python3 scripts/manifest.py --list
+
+# Verify the default set with the repository harness.
+bash scripts/verify-all.sh
+
+# Run one language in its declared container.
 docker compose run --rm python
-scripts/verify-all.sh python
+
+# Or invoke a pack directly after bootstrapping its declared toolchain.
+cd rust
+./verify.sh bootstrap compile unit property integration package
 ```
 
-Hermetic local runs: `docker compose run --rm <lang>`. Root verification
-writes `artifacts/verification.json`.
+Capability output is machine-readable:
 
-## License
+```text
+GATE unit: PASS
+GATE dependency-vulnerability: SKIP_UNSUPPORTED(no pinned scanner yet)
+```
 
-[MIT](LICENSE) © 2026 Steven Buglione.
+A `SKIP_UNSUPPORTED` is an explicit gap, not a pass.
+
+## Repository map
+
+- `docs/CONTRACTS.md` — normative cross-language behavior and gate semantics.
+- `docs/CURRENT_STATUS.md` — current implementation matrix and known gaps.
+- `AGENT_HANDOFF-v2.md` — researched audit, corrections, and ranked next work.
+- `standards/languages.yaml` — language/toolchain/workflow manifest.
+- `conformance/v2/` — shared vectors and schema validation.
+- `<lang>/LANG_SPEC.md` — language-specific policy and justified deviations.
+- `<lang>/verify.sh` — canonical gate runner.
+- `.github/workflows/reusable-verify.yml` — shared CI execution topology.
+
+`conformance/v2/gaps.json` is a historical audit snapshot tied to its recorded
+baseline SHA. It is not the current status document.

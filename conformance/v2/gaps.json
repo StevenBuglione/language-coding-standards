@@ -1,28 +1,93 @@
 {
-  "contractVersion": "2",
-  "baselineSha": "e856a5add491f1eebd58273224945a0f4b3ba797",
-  "note": "These v2 vectors describe required behavior that the audited implementations do not yet satisfy. Language adapters must keep failing them until WP4. Do not weaken a vector to match current code.",
-  "failingCaseIds": [
-    "money.construct.valid.isoStyleZzz",
-    "money.construct.invalid.aboveMaxSafe",
-    "money.add.invalid.overflow",
-    "money.times.invalid.overflow",
-    "quantity.construct.invalid.booleanTrue",
-    "quantity.construct.invalid.aboveMax",
-    "sku.construct.valid.stripSpaceTabCrLf",
-    "sku.construct.valid.nbspPrefixKept",
-    "sku.construct.valid.maxBytes",
-    "sku.construct.invalid.aboveMaxBytes",
-    "order.construct.valid.injectedId",
-    "order.construct.invalid.mixedCurrency",
-    "placeOrder.execute.success.persistsPaid",
-    "placeOrder.execute.paymentDecline.releasesReservation",
-    "placeOrder.execute.persistenceConflict.refundsAndReleases",
-    "placeOrder.execute.compensationFailure.afterSaveFailure",
-    "placeOrder.execute.idempotency.replaySameCommand",
-    "placeOrder.execute.idempotency.reusedKeyDifferentPayload",
-    "placeOrder.execute.concurrent.noOversell",
-    "repository.save.invalid.versionConflict",
-    "repository.get.snapshot.aliasSafety"
-  ]
+  "contractVersion": "2.0.0",
+  "auditedAt": "2026-08-26T00:00:00Z",
+  "baselineSha": "c85dfd54efaa30f684add7da7e2614f169e62c01",
+  "requiredCaseIds": [
+    "money.construct.zero",
+    "money.construct.max",
+    "money.construct.above-max",
+    "money.construct.negative",
+    "money.construct.bool",
+    "money.construct.fraction",
+    "money.construct.invalid-currency",
+    "money.construct.iso-style-zzz",
+    "money.add.same-currency",
+    "money.add.mismatch",
+    "money.add.overflow",
+    "money.times.zero",
+    "money.times.overflow",
+    "quantity.construct.one",
+    "quantity.construct.max",
+    "quantity.construct.zero",
+    "quantity.construct.above-max",
+    "quantity.construct.bool",
+    "quantity.construct.fraction",
+    "sku.construct.trim-ascii",
+    "sku.construct.preserve-case",
+    "sku.construct.nbsp-not-trimmed",
+    "sku.construct.empty-after-trim",
+    "sku.construct.too-long-utf8",
+    "order.construct.valid",
+    "order.construct.empty",
+    "order.construct.duplicate-normalized-sku",
+    "order.construct.mixed-currency",
+    "order.pay.new",
+    "order.pay.paid",
+    "order.ship.paid",
+    "order.ship.new",
+    "order.pay.shipped",
+    "workflow.place.success",
+    "workflow.place.insufficient-stock",
+    "workflow.place.payment-declined-release-ok",
+    "workflow.place.payment-declined-release-fails",
+    "workflow.place.save-conflict-compensates",
+    "workflow.place.save-conflict-compensation-fails",
+    "workflow.place.idempotent-replay",
+    "workflow.place.idempotency-key-reuse",
+    "workflow.place.concurrent-no-oversell",
+    "repository.get.unknown-id"
+  ],
+  "knownFailures": [
+    {
+      "caseId": "money.construct.above-max",
+      "languages": ["csharp", "go", "java", "python", "rust", "typescript"],
+      "reason": "Baseline implementations did not share the v2 safe-integer maximum."
+    },
+    {
+      "caseId": "quantity.construct.bool",
+      "languages": ["python"],
+      "reason": "Baseline Python accepted bool through integer semantics."
+    },
+    {
+      "caseId": "sku.construct.nbsp-not-trimmed",
+      "languages": ["csharp", "go", "java", "python", "rust", "typescript"],
+      "reason": "Baseline packs used language-default whitespace trimming."
+    },
+    {
+      "caseId": "order.construct.mixed-currency",
+      "languages": ["csharp", "go", "java", "python", "rust", "typescript"],
+      "reason": "Baseline packs deferred currency mismatch until total calculation."
+    },
+    {
+      "caseId": "order.pay.paid",
+      "languages": ["csharp", "java", "python", "rust", "typescript"],
+      "reason": "Baseline transition behavior diverged across languages."
+    },
+    {
+      "caseId": "workflow.place.success",
+      "languages": ["csharp", "go", "java", "python", "rust", "typescript"],
+      "reason": "Baseline workflow implementations did not consistently persist and return PAID."
+    },
+    {
+      "caseId": "workflow.place.concurrent-no-oversell",
+      "languages": ["csharp", "go", "java", "python", "rust", "typescript"],
+      "reason": "Baseline adapters had no shared atomic reservation proof."
+    },
+    {
+      "caseId": "repository.get.unknown-id",
+      "languages": ["python"],
+      "reason": "Baseline Python repository raised for unknown IDs."
+    }
+  ],
+  "note": "Historical audit snapshot for baselineSha only. Do not use this file as current implementation status; see docs/CURRENT_STATUS.md and verifier evidence."
 }

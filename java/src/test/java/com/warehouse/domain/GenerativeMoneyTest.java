@@ -16,14 +16,18 @@ final class GenerativeMoneyTest {
     long[] amounts = {0L, 1L, 17L, 250L, 9_007_199_254_740_990L};
     for (long left : amounts) {
       for (long right : amounts) {
-        if (left > Money.MAX_MINOR_UNITS - right) {
-          continue;
-        }
-        Money a = new Money(left, "USD");
-        Money b = new Money(right, "USD");
-        assertEquals(a.add(b), b.add(a));
+        assertCommutativeWhenSumIsRepresentable(left, right);
       }
     }
+  }
+
+  private static void assertCommutativeWhenSumIsRepresentable(long left, long right) {
+    if (left > Money.MAX_MINOR_UNITS - right) {
+      return;
+    }
+    Money a = new Money(left, "USD");
+    Money b = new Money(right, "USD");
+    assertEquals(a.add(b), b.add(a));
   }
 
   @Test

@@ -15,14 +15,8 @@
   <description>Max-strict PMD for the canonical warehouse domain.</description>
 
   <!-- ==== Error-prone ==================================================
-       Whole category active; the two exclusions below are documented. -->
+       Whole category active; the exclusions below are documented. -->
   <rule ref="category/java/errorprone.xml">
-    <!-- DataflowAnomalyAnalysis re-parses each method into a symbolic dataflow
-         graph and reports DD/UDD anomalies that are almost always legitimate
-         reassignment patterns (accumulator loops, try/finalize flows). The
-         same defect classes are covered without its false positives by
-         Error Prone + NullAway at compile time. -->
-    <exclude name="DataflowAnomalyAnalysis"/>
     <!-- SwitchStmtsShouldHaveDefault demands `default` even where the switch
          is exhaustive over a sealed hierarchy. Exhaustiveness is enforced by
          javac itself (a missing case is a compile error), and adding default
@@ -70,5 +64,10 @@
   </rule>
 
   <!-- ==== Best practices =============================================== -->
-  <rule ref="category/java/bestpractices.xml"/>
+  <rule ref="category/java/bestpractices.xml">
+    <!-- LoosePackageCoupling requires an explicit packages/classes allowlist.
+         Package direction is already enforced precisely by ArchUnit, so an
+         unconfigured duplicate rule would be silently removed by PMD. -->
+    <exclude name="LoosePackageCoupling"/>
+  </rule>
 </ruleset>

@@ -123,6 +123,7 @@ EOF_PACKAGE
     "target": "ES2023",
     "strict": true,
     "skipLibCheck": false,
+    "rootDir": "src",
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"]

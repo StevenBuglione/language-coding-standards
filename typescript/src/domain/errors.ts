@@ -68,6 +68,60 @@ export class InsufficientStock extends DomainError {
 }
 
 /**
+ * The payment processor refused to charge the order.
+ */
+export class PaymentDeclined extends DomainError {
+  /**
+   * @param message - details about which charge was refused and why.
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentDeclined";
+  }
+}
+
+/**
+ * An optimistic save lost a compare-and-set race.
+ */
+export class PersistenceConflict extends DomainError {
+  /**
+   * @param message - details about the expected and stored versions.
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = "PersistenceConflict";
+  }
+}
+
+/**
+ * Refund or reservation release failed after a partial success.
+ */
+export class CompensationFailure extends DomainError {
+  /**
+   * Which compensation step failed (`refund` or `release`).
+   */
+  readonly stage: string;
+
+  /**
+   * Adapter-supplied detail of the failure.
+   */
+  readonly detail: string;
+
+  /**
+   * Records which compensation step failed.
+   *
+   * @param stage - the compensation step that failed.
+   * @param detail - adapter-supplied description of the failure.
+   */
+  constructor(stage: string, detail: string) {
+    super(`compensation failed at ${stage}: ${detail}`);
+    this.stage = stage;
+    this.detail = detail;
+    this.name = "CompensationFailure";
+  }
+}
+
+/**
  * A shipped order can no longer be mutated.
  */
 export class OrderAlreadyShipped extends DomainError {

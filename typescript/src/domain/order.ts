@@ -15,12 +15,17 @@ declare const brand: unique symbol;
 export type OrderId = string & { readonly [brand]: "OrderId" };
 
 /**
- * Generates a fresh unique order identifier (UUID v4).
+ * Brands a non-empty identifier. The domain never mints ids itself.
  *
- * @returns the branded identifier value.
+ * @param value - caller-supplied identifier text.
+ * @returns the branded identifier.
+ * @throws InvalidOrder when the value is empty or whitespace-only.
  */
-export function generateOrderId(): OrderId {
-  return crypto.randomUUID() as OrderId;
+export function createOrderId(value: string): OrderId {
+  if (value.trim().length === 0) {
+    throw new InvalidOrder("order id must be non-empty");
+  }
+  return value as OrderId;
 }
 
 /**
@@ -59,15 +64,16 @@ export function lineTotal(line: OrderLine): Money {
 }
 
 /**
- * Order entity enforcing the four canonical invariants.
+ * Order entity enforcing the canonical invariants.
  *
- * Invariants: at least one line; no duplicate SKUs across lines; the total
- * always equals the sum of line totals (computed, never stored stale); no
- * mutation once shipped. Transitions follow NEW → PAID → SHIPPED exactly;
- * every illegal transition raises a typed domain error.
+ * Invariants: injected id; at least one line; no duplicate normalized SKUs;
+ * single currency at construction; total equals the checked sum of line
+ * totals; only NEW → PAID → SHIPPED is legal. Optimistic version starts at 0.
  */
 export class Order {
-  private status: OrderStatus = "NEW";
+  private currentStatus: OrderStatus = "NEW";
+
+  private currentVersion = 0;
 
   /**
    * Immutable unique identifier assigned at construction.
@@ -80,20 +86,26 @@ export class Order {
   readonly lines: readonly OrderLine[];
 
   /**
-   * Places a new order from validated lines, assigning a fresh id.
+   * Places a new order from validated lines and an injected id.
    *
    * @param lines - at least one line, with no SKU repeated across lines.
-   * @throws InvalidOrder when the line set is empty or has duplicate SKUs.
+   * @param id - identifier minted by the application, not by this entity.
+   * @throws InvalidOrder when the line set is empty, has duplicate SKUs, or
+   * mixes currencies.
    */
-  constructor(lines: readonly OrderLine[]) {
-    if (lines.length === 0) {
+  constructor(lines: readonly OrderLine[], id: OrderId) {
+    const firstLine = lines[0];
+    if (firstLine === undefined) {
       throw new InvalidOrder("an order requires at least one line");
     }
     const skus = new Set(lines.map((line) => line.sku));
     if (skus.size !== lines.length) {
       throw new InvalidOrder("duplicate SKUs across order lines are not allowed");
     }
-    this.id = generateOrderId();
+    if (lines.some((line) => line.unitPrice.currency !== firstLine.unitPrice.currency)) {
+      throw new InvalidOrder("mixed currencies are not allowed");
+    }
+    this.id = id;
     this.lines = [...lines];
   }
 
@@ -101,7 +113,7 @@ export class Order {
    * Rejects any mutation of an already-shipped order.
    */
   private ensureNotShipped(): void {
-    if (this.status === "SHIPPED") {
+    if (this.currentStatus === "SHIPPED") {
       throw new OrderAlreadyShipped(`order ${this.id} has already shipped`);
     }
   }
@@ -110,13 +122,18 @@ export class Order {
    * Returns the current state-machine state.
    */
   get state(): OrderStatus {
-    return this.status;
+    return this.currentStatus;
+  }
+
+  /**
+   * Returns the optimistic concurrency version; 0 for a newly constructed order.
+   */
+  get version(): number {
+    return this.currentVersion;
   }
 
   /**
    * Returns the sum of all line totals in a single currency.
-   *
-   * @throws InvalidOrder when line totals mix currencies.
    */
   total(): Money {
     const [firstLine, ...remainingLines] = this.lines;
@@ -140,10 +157,10 @@ export class Order {
    */
   pay(): void {
     this.ensureNotShipped();
-    if (this.status === "PAID") {
+    if (this.currentStatus === "PAID") {
       throw new InvalidOrder("order has already been paid");
     }
-    this.status = "PAID";
+    this.currentStatus = "PAID";
   }
 
   /**
@@ -154,9 +171,28 @@ export class Order {
    */
   ship(): void {
     this.ensureNotShipped();
-    if (this.status !== "PAID") {
+    if (this.currentStatus !== "PAID") {
       throw new InvalidOrder("only paid orders can be shipped");
     }
-    this.status = "SHIPPED";
+    this.currentStatus = "SHIPPED";
+  }
+
+  /**
+   * Increments the optimistic version after a successful save.
+   */
+  bumpVersion(): void {
+    this.currentVersion += 1;
+  }
+
+  /**
+   * Returns a detached copy so repositories cannot alias stored state.
+   *
+   * @returns an independent order with the same id, lines, status, and version.
+   */
+  snapshot(): Order {
+    const clone = new Order(this.lines, this.id);
+    clone.currentStatus = this.currentStatus;
+    clone.currentVersion = this.currentVersion;
+    return clone;
   }
 }

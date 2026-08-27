@@ -9,27 +9,39 @@
  * reviewed artifact and knip's unused-export analysis sound.
  */
 
+export { FixedOrderIdGenerator, SequenceOrderIdGenerator } from "./adapters/ids";
 export { InMemoryInventoryGateway } from "./adapters/inventory";
 export { FakePaymentProcessor } from "./adapters/payments";
 export type { FakePaymentProcessorOptions } from "./adapters/payments";
 export { InMemoryOrderRepository } from "./adapters/repository";
 export type {
-  ChargeResult,
+  ChargeReceipt,
+  IdempotencyRecord,
   InventoryGateway,
+  OrderIdGenerator,
   OrderRepository,
   PaymentProcessor,
-  ReserveResult,
+  ReservationToken,
 } from "./application/ports";
 export { createPlaceOrderUseCase, PlaceOrderUseCase } from "./application/place-order";
 export type {
+  PlaceOrderCommand,
   PlaceOrderFailure,
   PlaceOrderResult,
   PlaceOrderSuccess,
 } from "./application/place-order";
-export { DomainError, InsufficientStock, InvalidOrder, OrderAlreadyShipped } from "./domain/errors";
-export { Money } from "./domain/money";
-export { generateOrderId, lineTotal, Order } from "./domain/order";
+export {
+  CompensationFailure,
+  DomainError,
+  InsufficientStock,
+  InvalidOrder,
+  OrderAlreadyShipped,
+  PaymentDeclined,
+  PersistenceConflict,
+} from "./domain/errors";
+export { Money, MONEY_MINOR_UNITS_MAX } from "./domain/money";
+export { createOrderId, lineTotal, Order } from "./domain/order";
 export type { OrderId, OrderLine, OrderStatus } from "./domain/order";
-export { Quantity } from "./domain/quantity";
-export { createSku } from "./domain/sku";
+export { Quantity, QUANTITY_MAX } from "./domain/quantity";
+export { createSku, normalizeSkuCode, SKU_MAX_UTF8_BYTES } from "./domain/sku";
 export type { Sku } from "./domain/sku";

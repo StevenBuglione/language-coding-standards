@@ -18,10 +18,11 @@ source ./capabilities.sh
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
 
-# Pinned tool versions: installed fresh by the deps phase, never baked into
-# the image. Bump all three together after checking golangci-lint linter
-# upgrades; the exact pins are the supply-chain contract (LANG_SPEC.md).
+# Pinned tool versions: installed fresh by the bootstrap phase, never baked
+# into the image. The golangci-lint checksum manifest is itself digest-pinned,
+# so bootstrap never executes downloaded shell code.
 readonly GOLANGCI_LINT_VERSION="v2.13.1"
+readonly GOLANGCI_LINT_CHECKSUMS_SHA256="491b9fce854fdc756f75acd8f8f04661c96135720bcd783a87582ba47932dfa5"
 readonly DEADCODE_VERSION="v0.49.0"     # golang.org/x/tools/cmd/deadcode
 readonly GOVULNCHECK_VERSION="v1.7.0"   # golang.org/x/vuln/cmd/govulncheck
 
@@ -61,20 +62,99 @@ gate() {
   fi
 }
 
+verify_sha256() {
+  local file="$1" expected="$2" actual
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "${file}" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "${file}" | awk '{print $1}')"
+  else
+    printf 'neither sha256sum nor shasum is available\n' >&2
+    return 1
+  fi
+  if [[ "${actual}" != "${expected}" ]]; then
+    printf 'sha256 mismatch for %s: got %s, want %s\n' "${file}" "${actual}" "${expected}" >&2
+    return 1
+  fi
+}
+
+install_golangci_lint() {
+  local version os arch archive checksums release_base tmp expected binary
+  version="${GOLANGCI_LINT_VERSION#v}"
+  case "$(uname -s)" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *)
+      printf 'unsupported golangci-lint operating system: %s\n' "$(uname -s)" >&2
+      return 1
+      ;;
+  esac
+  case "$(uname -m)" in
+    x86_64 | amd64) arch="amd64" ;;
+    arm64 | aarch64) arch="arm64" ;;
+    *)
+      printf 'unsupported golangci-lint architecture: %s\n' "$(uname -m)" >&2
+      return 1
+      ;;
+  esac
+
+  archive="golangci-lint-${version}-${os}-${arch}.tar.gz"
+  checksums="golangci-lint-${version}-checksums.txt"
+  release_base="https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}"
+  tmp="$(mktemp -d)"
+
+  if ! curl --fail --location --silent --show-error \
+    --output "${tmp}/${checksums}" "${release_base}/${checksums}"; then
+    rm -rf "${tmp}"
+    printf 'failed to download golangci-lint checksum manifest\n' >&2
+    return 1
+  fi
+  if ! verify_sha256 "${tmp}/${checksums}" "${GOLANGCI_LINT_CHECKSUMS_SHA256}"; then
+    rm -rf "${tmp}"
+    return 1
+  fi
+  expected="$(awk -v name="${archive}" '$2 == name { print $1; exit }' "${tmp}/${checksums}")"
+  if [[ -z "${expected}" ]]; then
+    rm -rf "${tmp}"
+    printf 'checksum manifest has no entry for %s\n' "${archive}" >&2
+    return 1
+  fi
+  if ! curl --fail --location --silent --show-error \
+    --output "${tmp}/${archive}" "${release_base}/${archive}"; then
+    rm -rf "${tmp}"
+    printf 'failed to download %s\n' "${archive}" >&2
+    return 1
+  fi
+  if ! verify_sha256 "${tmp}/${archive}" "${expected}"; then
+    rm -rf "${tmp}"
+    return 1
+  fi
+  if ! tar -xzf "${tmp}/${archive}" -C "${tmp}"; then
+    rm -rf "${tmp}"
+    printf 'failed to extract %s\n' "${archive}" >&2
+    return 1
+  fi
+  binary="${tmp}/golangci-lint-${version}-${os}-${arch}/golangci-lint"
+  if [[ ! -x "${binary}" ]]; then
+    rm -rf "${tmp}"
+    printf 'release archive did not contain executable golangci-lint\n' >&2
+    return 1
+  fi
+  cp "${binary}" "${GOPATH}/bin/golangci-lint"
+  chmod 0755 "${GOPATH}/bin/golangci-lint"
+  rm -rf "${tmp}"
+  golangci-lint version
+}
+
 run_deps() {
-  # Errexit is suspended inside gate()'s `|| rc=$?` capture, so EVERY
-  # fallible step here fails explicitly instead of half-installing tools
-  # and letting a later phase fail with a confusing missing-command error.
+  # Errexit is suspended inside gate()'s `|| rc=$?` capture, so every
+  # fallible step here fails explicitly instead of half-installing tools.
   if ! go mod download; then
     printf 'go mod download failed\n' >&2
     return 1
   fi
   mkdir -p "${GOPATH}/bin"
-  # Official installer script fetched at the SAME exact version tag as the
-  # binary it installs -> both script and release are pinned (LANG_SPEC.md
-  # documents the supply-chain tradeoff against `go tool` directives).
-  if ! curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" |
-    sh -s -- -b "${GOPATH}/bin" "${GOLANGCI_LINT_VERSION}"; then
+  if ! install_golangci_lint; then
     printf 'golangci-lint %s install failed\n' "${GOLANGCI_LINT_VERSION}" >&2
     return 1
   fi
@@ -93,10 +173,8 @@ run_lint() {
   if ! golangci-lint run ./...; then
     return 1
   fi
-  # TODO/FIXME ban: Go has no native linter for unfinished-work markers that
-  # survives config review cleanly, so the ban is a grep INSIDE the lint
-  # phase (documented in LANG_SPEC.md). Scope: production code only —
-  # bad_examples/ deliberately contains markers for its own fixture.
+  # TODO/FIXME ban: scope production code only; bad_examples deliberately
+  # contains markers for its rejection fixture.
   local hits
   hits="$(grep -rnE '(TODO|FIXME)' internal cmd || true)"
   if [[ -n "${hits}" ]]; then
@@ -114,25 +192,41 @@ run_types() {
 }
 
 run_arch() {
-  # Single-linter pass so the boundary contract has a visibly named gate of
-  # its own (--default=none -E depguard runs ONLY depguard). The full lint
-  # phase also runs depguard; this pass is the architecture gate's home.
+  # The full lint phase also runs depguard; this pass gives architecture a
+  # separately named proof gate.
   golangci-lint run --default=none -E depguard ./...
+}
+
+run_go_tests() {
+  local log rc
+  log="$(mktemp)"
+  rc=0
+  go test -json "$@" >"${log}" 2>&1 || rc=$?
+  cat "${log}" >&2
+  if ((rc != 0)); then
+    rm -f "${log}"
+    return "${rc}"
+  fi
+  if ! grep -qE '"Action":"run".*"Test":"[^"]+"' "${log}"; then
+    printf 'go test executed zero tests for arguments: %s\n' "$*" >&2
+    rm -f "${log}"
+    return 1
+  fi
+  rm -f "${log}"
+}
+
+run_unit_tests() {
+  run_go_tests -race -shuffle=on -count=1 ./internal/domain || return 1
+  run_go_tests -race -shuffle=on -count=1 ./internal/adapters || return 1
+  run_go_tests -race -shuffle=on -count=1 ./internal/application
 }
 
 run_coverage() {
   # R3 floor rule: floor = measured total - 4, rounded down, minimum 80.
-  # Baseline measured on first green run: 96% of statements across
-  # ./internal/... (the remaining 4% are provably-unreachable defensive
-  # branches; see LANG_SPEC.md thresholds). The floor is a committed
-  # constant, like the tool pins above — change it in review, not per-run.
   local floor=92
   rm -f cover.out
-  # -coverpkg=./internal/... makes every package's test binary instrument the
-  # whole internal tree, so the application-level integration test earns
-  # credit for the adapters it drives. cmd/ is excluded from the measured
-  # scope: it is thin wiring around the library, with no logic of its own.
-  if ! go test -race -coverprofile=cover.out -covermode=atomic -coverpkg=./internal/... ./...; then
+  if ! run_go_tests -race -coverprofile=cover.out -covermode=atomic \
+    -coverpkg=./internal/... ./...; then
     return 1
   fi
   local total
@@ -149,9 +243,7 @@ run_coverage() {
 }
 
 run_deadcode() {
-  # -test counts functions reachable only from tests as live: this module is
-  # a library-style pipeline exercised through its tests plus one demo main,
-  # so test-only reachability is honest liveness here.
+  # -test counts functions reachable only from tests as live.
   deadcode -test ./...
 }
 
@@ -167,7 +259,23 @@ run_mutation() {
 }
 
 run_package() {
-  go build -o /tmp/warehouse-cmd ./cmd/warehouse
+  local tmp output rc
+  tmp="$(mktemp -d)"
+  output=""
+  rc=0
+  go build -trimpath -o "${tmp}/warehouse" ./cmd/warehouse || rc=$?
+  if ((rc == 0)); then
+    output="$("${tmp}/warehouse" 2>&1)" || rc=$?
+    printf '%s\n' "${output}"
+  fi
+  if ((rc == 0)) && ! grep -Eq \
+    '^placed order [^:]+: 2 x SKU-1000 @ 1999 minor units = 3998 USD \(PAID\)$' \
+    <<<"${output}"; then
+    printf 'packaged warehouse executable produced unexpected output\n' >&2
+    rc=1
+  fi
+  rm -rf "${tmp}"
+  return "${rc}"
 }
 
 cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
@@ -180,9 +288,15 @@ for phase in "${phases[@]}"; do
     lint) gate lint run_lint ;;
     compile) gate compile run_types ;;
     architecture) gate architecture run_arch ;;
-    unit) gate unit go test -race -shuffle=on -count=1 ./internal/domain ./internal/adapters ./internal/application ;;
-    property) gate property go test -count=1 ./internal/domain -run 'Commutative|Distributes' ;;
-    integration) gate integration go test -race -count=1 ./internal/application -run PlaceOrder ;;
+    unit) gate unit run_unit_tests ;;
+    property)
+      gate property run_go_tests -count=1 \
+        -run '^(TestMoneyAdditionIsCommutative|TestMoneyScalingDistributesOverAddition)$' \
+        ./internal/domain
+      ;;
+    integration)
+      gate integration run_go_tests -race -count=1 -run '^TestPlaceOrder' ./internal/application
+      ;;
     package) gate package run_package ;;
     coverage) gate coverage run_coverage ;;
     dead-code) gate dead-code run_deadcode ;;
@@ -196,7 +310,7 @@ for phase in "${phases[@]}"; do
       printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
       ;;
     reproducibility)
-      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is root evidence)\n'
       ;;
     *)
       printf 'internal error: unhandled capability %s\n' "${phase}" >&2

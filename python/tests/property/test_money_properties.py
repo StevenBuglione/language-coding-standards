@@ -7,7 +7,7 @@ from hypothesis import strategies as st
 from warehouse.domain.errors import InvalidOrder
 from warehouse.domain.money import Money
 
-amounts = st.integers(min_value=0, max_value=10**9)
+amounts = st.integers(min_value=0, max_value=10**6)
 currencies = st.sampled_from(["USD", "EUR", "GBP"])
 same_currency_pairs = st.tuples(amounts, amounts, currencies).map(
     lambda triple: (

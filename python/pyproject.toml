@@ -192,6 +192,7 @@ exhaustive = true
 name = "adapters independent of each other"
 type = "independence"
 modules = [
+    "warehouse.adapters.ids",
     "warehouse.adapters.inventory",
     "warehouse.adapters.payments",
     "warehouse.adapters.repository",

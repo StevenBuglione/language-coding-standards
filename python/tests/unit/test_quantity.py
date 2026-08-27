@@ -18,3 +18,18 @@ def test_rejects_zero() -> None:
 def test_rejects_negative() -> None:
     with pytest.raises(InvalidOrder, match="strictly positive"):
         Quantity(value=-3)
+
+
+def test_rejects_boolean_true() -> None:
+    with pytest.raises(InvalidOrder, match="strictly positive integer"):
+        Quantity(value=True)  # type: ignore[arg-type]
+
+
+def test_rejects_boolean_false() -> None:
+    with pytest.raises(InvalidOrder, match="strictly positive integer"):
+        Quantity(value=False)  # type: ignore[arg-type]
+
+
+def test_rejects_above_max() -> None:
+    with pytest.raises(InvalidOrder, match="exceeds"):
+        Quantity(value=2_147_483_648)

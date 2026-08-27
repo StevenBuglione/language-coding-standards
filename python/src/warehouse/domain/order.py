@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -20,16 +19,21 @@ if TYPE_CHECKING:
 class OrderStatus(Enum):
     """States of the canonical order life cycle."""
 
-    NEW = "new"
-    PAID = "paid"
-    SHIPPED = "shipped"
+    NEW = "NEW"
+    PAID = "PAID"
+    SHIPPED = "SHIPPED"
 
 
 @dataclass(frozen=True, slots=True)
 class OrderId:
-    """Immutable unique identifier of an order."""
+    """Immutable unique identifier of an order, injected by the application."""
 
-    value: uuid.UUID
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject empty identifiers."""
+        if not self.value or not self.value.strip():
+            raise InvalidOrder("order id must be non-empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,23 +52,27 @@ class OrderLine:
 
 class Order:
     """
-    Order entity enforcing the four canonical invariants.
+    Order entity enforcing the canonical invariants.
 
-    Invariants: at least one line; no duplicate SKUs across lines; the total
-    always equals the sum of line totals (computed, never stored stale); no
-    mutation once shipped.
+    Invariants: injected id; at least one line; no duplicate normalized SKUs;
+    single currency at construction; total equals the checked sum of line
+    totals; only NEW -> PAID -> SHIPPED is legal.
     """
 
-    def __init__(self, lines: Sequence[OrderLine]) -> None:
-        """Place a new order from validated lines, assigning a fresh id."""
+    def __init__(self, lines: Sequence[OrderLine], order_id: OrderId) -> None:
+        """Place a new order from validated lines and an injected id."""
         if not lines:
             raise InvalidOrder("an order requires at least one line")
         codes = [line.sku.code for line in lines]
         if len(set(codes)) != len(codes):
             raise InvalidOrder("duplicate SKUs across order lines are not allowed")
-        self._id = OrderId(value=uuid.uuid4())
+        currency = lines[0].unit_price.currency
+        if any(line.unit_price.currency != currency for line in lines):
+            raise InvalidOrder("mixed currencies are not allowed")
+        self._id = order_id
         self._lines: tuple[OrderLine, ...] = tuple(lines)
         self._status = OrderStatus.NEW
+        self._version = 0
 
     @property
     def id(self) -> OrderId:
@@ -75,6 +83,11 @@ class Order:
     def status(self) -> OrderStatus:
         """Return the current state-machine state."""
         return self._status
+
+    @property
+    def version(self) -> int:
+        """Return the optimistic concurrency version."""
+        return self._version
 
     @property
     def lines(self) -> tuple[OrderLine, ...]:
@@ -101,6 +114,19 @@ class Order:
         if self._status is not OrderStatus.PAID:
             raise InvalidOrder("only paid orders can be shipped")
         self._status = OrderStatus.SHIPPED
+
+    def bump_version(self) -> None:
+        """Increment the optimistic version after a successful save."""
+        self._version += 1
+
+    def snapshot(self) -> Order:
+        """Return a detached copy so repositories cannot alias stored state."""
+        clone = object.__new__(Order)
+        clone._id = self._id
+        clone._lines = self._lines
+        clone._status = self._status
+        clone._version = self._version
+        return clone
 
     def _ensure_not_shipped(self) -> None:
         """Reject any mutation of an already-shipped order."""

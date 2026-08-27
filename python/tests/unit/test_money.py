@@ -39,3 +39,18 @@ def test_times_rejects_negative_multiplier() -> None:
 
 def test_equality_is_value_based() -> None:
     assert Money(minor_units=10, currency="EUR") == Money(10, "EUR")
+
+
+def test_accepts_iso_style_zzz() -> None:
+    assert Money(minor_units=0, currency="ZZZ").currency == "ZZZ"
+
+
+def test_rejects_above_shared_maximum() -> None:
+    with pytest.raises(InvalidOrder, match="exceeds"):
+        Money(minor_units=9_007_199_254_740_992, currency="USD")
+
+
+def test_add_rejects_overflow() -> None:
+    max_money = Money(minor_units=9_007_199_254_740_991, currency="USD")
+    with pytest.raises(InvalidOrder, match="overflows"):
+        max_money.add(Money(minor_units=1, currency="USD"))

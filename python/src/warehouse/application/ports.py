@@ -1,8 +1,7 @@
 """
 Ports: interfaces the application owns and the adapters layer implements.
 
-Every fallible port returns a result union instead of raising: success carries
-a frozen outcome marker, failure carries exactly one typed domain error.
+Fallible ports return a result union instead of raising.
 """
 
 from __future__ import annotations
@@ -11,45 +10,95 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from warehouse.domain.errors import InsufficientStock, InvalidOrder
-    from warehouse.domain.order import Order, OrderId
-    from warehouse.domain.quantity import Quantity
-    from warehouse.domain.sku import Sku
+    from collections.abc import Sequence
+
+    from warehouse.domain.errors import (
+        CompensationFailure,
+        InsufficientStock,
+        PaymentDeclined,
+        PersistenceConflict,
+    )
+    from warehouse.domain.order import Order, OrderId, OrderLine
 
 
 @dataclass(frozen=True, slots=True)
-class Reserved:
-    """Success marker proving a stock reservation happened."""
+class ReservationToken:
+    """Proof that stock for an order was reserved atomically."""
+
+    order_id: OrderId
+    idempotency_key: str
 
 
 @dataclass(frozen=True, slots=True)
-class Charged:
-    """Success marker proving a payment collection happened."""
+class ChargeReceipt:
+    """Proof that payment was collected for an idempotency key."""
+
+    order_id: OrderId
+    idempotency_key: str
+
+
+class OrderIdGenerator(Protocol):
+    """Outbound port that mints deterministic-in-tests order identifiers."""
+
+    def next(self) -> OrderId:
+        """Return the next identifier."""
+        ...
 
 
 class InventoryGateway(Protocol):
-    """Outbound port for reserving stock on the inventory edge."""
+    """Outbound port for atomic stock reservation."""
 
-    def reserve(self, sku: Sku, quantity: Quantity) -> Reserved | InsufficientStock:
-        """Attempt a reservation; report shortage as a typed failure."""
+    def reserve_all(
+        self,
+        order_id: OrderId,
+        lines: Sequence[OrderLine],
+        idempotency_key: str,
+    ) -> ReservationToken | InsufficientStock:
+        """Reserve every line or none."""
+        ...
+
+    def release(
+        self,
+        token: ReservationToken,
+    ) -> None | CompensationFailure:
+        """Release a previous reservation."""
         ...
 
 
 class PaymentProcessor(Protocol):
-    """Outbound port for collecting payment on the payments edge."""
+    """Outbound port for idempotent payment collection."""
 
-    def charge(self, order: Order) -> Charged | InvalidOrder:
-        """Attempt collection; report refusal as a typed failure."""
+    def charge(
+        self,
+        order: Order,
+        idempotency_key: str,
+    ) -> ChargeReceipt | PaymentDeclined:
+        """Charge the order total; identical retries return the same receipt."""
+        ...
+
+    def refund(
+        self,
+        receipt: ChargeReceipt,
+    ) -> None | CompensationFailure:
+        """Void or refund a prior charge."""
         ...
 
 
 class OrderRepository(Protocol):
-    """Outbound port that persists and retrieves orders."""
+    """Outbound port that persists and retrieves immutable snapshots."""
 
-    def save(self, order: Order) -> Order:
-        """Persist the order and return the persisted snapshot."""
+    def save(self, order: Order, expected_version: int) -> Order | PersistenceConflict:
+        """Persist with compare-and-set semantics; return a snapshot."""
         ...
 
     def get(self, order_id: OrderId) -> Order | None:
-        """Return the stored order or None; absence never raises."""
+        """Return a stored snapshot or None; absence never raises."""
+        ...
+
+    def get_by_idempotency_key(self, key: str) -> tuple[str, Order] | None:
+        """Return fingerprint and snapshot for a previous successful command."""
+        ...
+
+    def remember_idempotency(self, key: str, fingerprint: str, order: Order) -> None:
+        """Record a successful command so retries can replay."""
         ...

@@ -18,3 +18,12 @@ def test_rejects_blank_after_trim() -> None:
 def test_rejects_empty_string() -> None:
     with pytest.raises(InvalidOrder, match="non-empty"):
         Sku(code="")
+
+
+def test_preserves_nbsp_prefix() -> None:
+    assert Sku(code="\u00a0ABC").code == "\u00a0ABC"
+
+
+def test_rejects_over_byte_limit() -> None:
+    with pytest.raises(InvalidOrder, match="UTF-8 bytes"):
+        Sku(code="A" * 65)

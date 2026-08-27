@@ -142,7 +142,7 @@ for phase in "${phases[@]}"; do
     lint) gate lint uv run ruff check . ;;
     types) gate types uv run basedpyright ;;
     arch) gate arch uv run lint-imports ;;
-    test) gate test uv run pytest tests/unit tests/integration -q ;;
+    test) gate test uv run pytest tests/unit tests/integration tests/property -q ;;
     coverage) CI=true gate coverage uv run pytest tests -q --cov=warehouse --cov-branch --cov-report=term-missing ;;
     deadcode) gate deadcode uv run vulture src vulture_whitelist.py --min-confidence 80 ;;
     # Export AND audit both run inside the gate: a failed uv export must

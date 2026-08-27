@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Warehouse.Adapters</RootNamespace>
+    <Description>In-memory adapters for the warehouse-order ports.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Warehouse.Application\Warehouse.Application.csproj" />
+  </ItemGroup>
+</Project>

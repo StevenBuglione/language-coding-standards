@@ -1,0 +1,9 @@
+bin/
+obj/
+.nuget/
+.dotnet/
+.cache/
+TestResults/
+*.user
+*.suo
+*.csproj.user

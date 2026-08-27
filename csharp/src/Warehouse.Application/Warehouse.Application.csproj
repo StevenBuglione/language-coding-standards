@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Warehouse.Application</RootNamespace>
+    <Description>Place-order use case and outbound ports.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Warehouse.Domain\Warehouse.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -147,27 +147,32 @@
     },
     "csharp": {
       "displayName": "C#",
-      "state": "planned",
+      "state": "experimental",
+      "inDefault": false,
       "folder": "csharp",
-      "verifier": null,
-      "workflow": null,
-      "dockerfile": null,
-      "spec": "docs/adr/005-planned-language-onboarding.md",
+      "verifier": "csharp/verify.sh",
+      "workflow": ".github/workflows/csharp.yml",
+      "dockerfile": "csharp/Dockerfile",
+      "spec": "csharp/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "TBD (.NET 10 / global.json)",
+      "toolchain": ".NET 9 SDK (global.json, rollForward: latestFeature)",
       "composeService": null,
       "artifact": "nupkg",
       "os": ["linux"],
       "image": {
         "repository": "mcr.microsoft.com/dotnet/sdk",
-        "tag": null,
+        "tag": "9.0",
         "digest": null
       },
-      "propertyTesting": "FsCheck or reviewed equivalent",
-      "architecture": "NetArchTest / ArchUnitNET",
-      "sast": "Roslyn analyzers",
+      "propertyTesting": "seeded generative xUnit (FsCheck pending)",
+      "architecture": "project-reference boundaries + reflection tests",
+      "sast": "Roslyn analyzers (AnalysisMode All)",
       "dependencyVulnerability": "dotnet list package --vulnerable",
-      "requiredCapabilities": []
+      "requiredCapabilities": [
+        "bootstrap", "format", "compile", "architecture",
+        "unit", "property", "integration", "package",
+        "sast", "lock-integrity", "negative-fixtures"
+      ]
     },
     "kotlin": {
       "displayName": "Kotlin",

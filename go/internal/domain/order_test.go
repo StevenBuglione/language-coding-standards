@@ -4,12 +4,9 @@ import (
 	"errors"
 	"math/rand"
 	"testing"
-	"time"
 
 	"warehouse/internal/domain"
 )
-
-var placementTime = time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 
 func line(sku string, quantity int64, minorUnits int64) domain.OrderLine {
 	return domain.MustOrderLine(
@@ -25,10 +22,12 @@ func TestNewOrderEnforcesStructuralInvariants(t *testing.T) {
 	tests := []struct {
 		name  string
 		lines []domain.OrderLine
+		id    domain.OrderID
 	}{
 		{
 			name:  "no lines",
 			lines: nil,
+			id:    domain.MustOrderID("ord-1"),
 		},
 		{
 			name: "duplicate skus across lines",
@@ -36,12 +35,26 @@ func TestNewOrderEnforcesStructuralInvariants(t *testing.T) {
 				line("SKU-A", 1, 100),
 				line("SKU-A", 2, 100),
 			},
+			id: domain.MustOrderID("ord-1"),
+		},
+		{
+			name: "duplicate skus after ascii trim",
+			lines: []domain.OrderLine{
+				line("SKU-A", 1, 100),
+				line(" SKU-A ", 1, 100),
+			},
+			id: domain.MustOrderID("ord-1"),
+		},
+		{
+			name:  "empty order id",
+			lines: []domain.OrderLine{line("SKU-A", 1, 100)},
+			id:    domain.OrderID{Value: "  "},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := domain.NewOrder(tt.lines, placementTime)
+			got, err := domain.NewOrder(tt.lines, tt.id)
 			if err == nil {
 				t.Fatalf("NewOrder(%v) = %+v, want error", tt.lines, got)
 			}
@@ -60,7 +73,7 @@ func TestNewOrderRejectsMixedCurrencies(t *testing.T) {
 		domain.MustOrderLine(domain.MustSku("SKU-A"), domain.MustQuantity(1), domain.MustMoney(100, "USD")),
 		domain.MustOrderLine(domain.MustSku("SKU-B"), domain.MustQuantity(1), domain.MustMoney(100, "EUR")),
 	}
-	got, err := domain.NewOrder(mixed, placementTime)
+	got, err := domain.NewOrder(mixed, domain.MustOrderID("ord-1"))
 	if err == nil {
 		t.Fatalf("NewOrder with mixed currencies = %+v, want error", got)
 	}
@@ -74,15 +87,18 @@ func TestNewOrderStartsNewAndCopiesLines(t *testing.T) {
 	t.Parallel()
 
 	lines := []domain.OrderLine{line("SKU-A", 1, 100)}
-	order, err := domain.NewOrder(lines, placementTime)
+	order, err := domain.NewOrder(lines, domain.MustOrderID("ord-fixed-9"))
 	if err != nil {
 		t.Fatalf("NewOrder returned error: %v", err)
 	}
 	if order.Status() != domain.StatusNew {
 		t.Fatalf("fresh order status = %s, want new", order.Status().Label())
 	}
-	if order.PlacedAt() != placementTime {
-		t.Fatalf("placedAt = %v, want %v", order.PlacedAt(), placementTime)
+	if order.ID().Value != "ord-fixed-9" {
+		t.Fatalf("id = %q, want injected ord-fixed-9", order.ID().Value)
+	}
+	if order.Version() != 0 {
+		t.Fatalf("version = %d, want 0", order.Version())
 	}
 	lines[0] = line("SKU-B", 9, 900)
 	stored := order.Lines()
@@ -144,12 +160,12 @@ func TestNewOrderLineValidatesRawParts(t *testing.T) {
 func TestOrderLineTotalRejectsInvalidPrice(t *testing.T) {
 	t.Parallel()
 
-	line := domain.OrderLine{
+	badLine := domain.OrderLine{
 		SKU:       domain.MustSku("SKU-A"),
 		Quantity:  domain.MustQuantity(2),
 		UnitPrice: domain.Money{MinorUnits: -500, Currency: "USD"},
 	}
-	got, err := line.LineTotal()
+	got, err := badLine.LineTotal()
 	if err == nil {
 		t.Fatalf("LineTotal on invalid price = %+v, want error", got)
 	}
@@ -208,7 +224,7 @@ func TestOrderTotalEqualsSumOfLineTotals(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			order, err := domain.NewOrder(tt.lines, placementTime)
+			order, err := domain.NewOrder(tt.lines, domain.MustOrderID("ord-prop"))
 			if err != nil {
 				t.Fatalf("NewOrder returned error: %v", err)
 			}
@@ -226,7 +242,7 @@ func TestOrderTotalEqualsSumOfLineTotals(t *testing.T) {
 
 func newPlacedOrder(t *testing.T) *domain.Order {
 	t.Helper()
-	order, err := domain.NewOrder([]domain.OrderLine{line("SKU-A", 1, 100)}, placementTime)
+	order, err := domain.NewOrder([]domain.OrderLine{line("SKU-A", 1, 100)}, domain.MustOrderID("ord-1"))
 	if err != nil {
 		t.Fatalf("NewOrder returned error: %v", err)
 	}
@@ -287,7 +303,7 @@ func TestShippedOrderIsImmutable(t *testing.T) {
 
 	order, err := domain.NewOrder(
 		[]domain.OrderLine{line("SKU-A", 1, 100), line("SKU-B", 2, 250)},
-		placementTime,
+		domain.MustOrderID("ord-1"),
 	)
 	if err != nil {
 		t.Fatalf("NewOrder returned error: %v", err)
@@ -316,6 +332,23 @@ func TestShippedOrderIsImmutable(t *testing.T) {
 	}
 	if shipped.ID.Value == "" {
 		t.Fatal("OrderAlreadyShipped carried an empty id")
+	}
+}
+
+func TestOrderSnapshotIsDetached(t *testing.T) {
+	t.Parallel()
+
+	order := newPlacedOrder(t)
+	clone := order.Snapshot()
+	if err := clone.Pay(); err != nil {
+		t.Fatalf("Pay on snapshot returned error: %v", err)
+	}
+	clone.BumpVersion()
+	if order.Status() != domain.StatusNew {
+		t.Fatalf("mutating snapshot changed original status to %s", order.Status().Label())
+	}
+	if order.Version() != 0 {
+		t.Fatalf("mutating snapshot changed original version to %d", order.Version())
 	}
 }
 

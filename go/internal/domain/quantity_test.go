@@ -17,6 +17,7 @@ func TestNewQuantityAcceptsPositiveValues(t *testing.T) {
 	}{
 		{name: "one", value: 1, want: domain.Quantity(1)},
 		{name: "typical order line", value: 12, want: domain.Quantity(12)},
+		{name: "shared maximum", value: domain.QuantityMax, want: domain.Quantity(domain.QuantityMax)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -41,6 +42,7 @@ func TestNewQuantityRejectsNonPositiveValues(t *testing.T) {
 	}{
 		{name: "zero", value: 0},
 		{name: "negative", value: -3},
+		{name: "above shared maximum", value: domain.QuantityMax + 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

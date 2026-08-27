@@ -1,0 +1,18 @@
+# Bytecode and local caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+.hypothesis/
+.mutmut-cache*
+.uv-cache/
+.cache/
+.venv/
+node_modules/
+target/
+*.class
+
+# Verifier outputs
+artifacts/

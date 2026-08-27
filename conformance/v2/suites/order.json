@@ -1,0 +1,276 @@
+{
+  "contractVersion": "2",
+  "suite": "order",
+  "cases": [
+    {
+      "id": "order.construct.valid.singleLine",
+      "description": "A one-line order starts NEW with the injected id.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-1" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "2",
+            "unitPrice": { "minorUnits": "300", "currency": "EUR" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "id": "ord-1",
+          "status": "NEW",
+          "totalMinorUnits": "600",
+          "currency": "EUR",
+          "version": "0"
+        }
+      }
+    },
+    {
+      "id": "order.construct.valid.injectedId",
+      "description": "The domain stores the injected OrderId and does not read ambient randomness.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-fixed-9" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": { "id": "ord-fixed-9", "status": "NEW" }
+      }
+    },
+    {
+      "id": "order.construct.valid.totalEqualsLineSum",
+      "description": "Total is the checked sum of line totals, never a stored stale field.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-2" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "2",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          },
+          {
+            "sku": "SKU-B",
+            "quantity": "3",
+            "unitPrice": { "minorUnits": "50", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "id": "ord-2",
+          "status": "NEW",
+          "totalMinorUnits": "350",
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "id": "order.construct.invalid.emptyLines",
+      "description": "An order requires at least one line.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-3" },
+      "input": { "lines": [] },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.construct.invalid.duplicateSkus",
+      "description": "Duplicate SKU codes are rejected.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-4" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          },
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.construct.invalid.duplicateSkusAfterNormalization",
+      "description": "Duplicate detection uses the normalized SKU, so padded ASCII whitespace collides.",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-5" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          },
+          {
+            "sku": " SKU-A ",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.construct.invalid.mixedCurrency",
+      "description": "Mixed-currency lines are rejected at construction, not later at total().",
+      "operation": "order.construct",
+      "given": { "orderId": "ord-6" },
+      "input": {
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          },
+          {
+            "sku": "SKU-B",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "100", "currency": "EUR" }
+          }
+        ]
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.pay.valid.newToPaid",
+      "description": "pay() is the only legal NEW to PAID transition.",
+      "operation": "order.pay",
+      "given": {
+        "order": {
+          "id": "ord-7",
+          "status": "NEW",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": {
+        "outcome": "ok",
+        "result": { "id": "ord-7", "status": "PAID" }
+      }
+    },
+    {
+      "id": "order.pay.invalid.alreadyPaid",
+      "description": "pay() on PAID is an explicit invalid transition.",
+      "operation": "order.pay",
+      "given": {
+        "order": {
+          "id": "ord-8",
+          "status": "PAID",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.pay.invalid.shipped",
+      "description": "Any mutation of SHIPPED returns OrderAlreadyShipped.",
+      "operation": "order.pay",
+      "given": {
+        "order": {
+          "id": "ord-9",
+          "status": "SHIPPED",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": { "outcome": "error", "error": "OrderAlreadyShipped" }
+    },
+    {
+      "id": "order.ship.valid.paidToShipped",
+      "description": "Only PAID orders may ship.",
+      "operation": "order.ship",
+      "given": {
+        "order": {
+          "id": "ord-10",
+          "status": "PAID",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": {
+        "outcome": "ok",
+        "result": { "id": "ord-10", "status": "SHIPPED" }
+      }
+    },
+    {
+      "id": "order.ship.invalid.fromNew",
+      "description": "Shipping a NEW order is an invalid transition.",
+      "operation": "order.ship",
+      "given": {
+        "order": {
+          "id": "ord-11",
+          "status": "NEW",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "order.ship.invalid.alreadyShipped",
+      "description": "Shipping an already-shipped order returns OrderAlreadyShipped.",
+      "operation": "order.ship",
+      "given": {
+        "order": {
+          "id": "ord-12",
+          "status": "SHIPPED",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "input": {},
+      "expect": { "outcome": "error", "error": "OrderAlreadyShipped" }
+    }
+  ]
+}

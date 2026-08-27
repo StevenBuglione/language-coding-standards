@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://language-coding-standards.local/conformance/v2/schema.json",
+  "title": "Contract v2 conformance suite",
+  "description": "Language-independent warehouse-order behavior vectors. Integer amounts are decimal strings so values above IEEE-754 safe integers stay lossless.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "suite", "cases"],
+  "properties": {
+    "contractVersion": {
+      "const": "2"
+    },
+    "suite": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "integerString": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)$"
+    },
+    "currencyCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO-style currency code: exactly three uppercase ASCII letters. Not an ISO-4217 membership check; ZZZ is valid."
+    },
+    "errorCode": {
+      "enum": [
+        "InvalidOrder",
+        "InsufficientStock",
+        "PaymentDeclined",
+        "PersistenceConflict",
+        "InfrastructureFailure",
+        "CompensationFailure",
+        "OrderAlreadyShipped"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "money.construct",
+        "money.add",
+        "money.times",
+        "quantity.construct",
+        "sku.construct",
+        "order.construct",
+        "order.pay",
+        "order.ship",
+        "placeOrder.execute",
+        "repository.save",
+        "repository.get"
+      ]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "operation", "input", "expect"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "given": {
+          "type": "object"
+        },
+        "input": {
+          "type": "object"
+        },
+        "expect": {
+          "$ref": "#/$defs/expect"
+        }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {
+          "enum": ["ok", "error"]
+        },
+        "error": {
+          "$ref": "#/$defs/errorCode"
+        },
+        "result": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "outcome": { "const": "ok" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "required": ["result"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": {
+            "properties": { "outcome": { "const": "error" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "required": ["error"]
+          }
+        }
+      ]
+    }
+  }
+}

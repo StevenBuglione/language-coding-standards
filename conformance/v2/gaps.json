@@ -1,0 +1,28 @@
+{
+  "contractVersion": "2",
+  "baselineSha": "e856a5add491f1eebd58273224945a0f4b3ba797",
+  "note": "These v2 vectors describe required behavior that the audited implementations do not yet satisfy. Language adapters must keep failing them until WP4. Do not weaken a vector to match current code.",
+  "failingCaseIds": [
+    "money.construct.valid.isoStyleZzz",
+    "money.construct.invalid.aboveMaxSafe",
+    "money.add.invalid.overflow",
+    "money.times.invalid.overflow",
+    "quantity.construct.invalid.booleanTrue",
+    "quantity.construct.invalid.aboveMax",
+    "sku.construct.valid.stripSpaceTabCrLf",
+    "sku.construct.valid.nbspPrefixKept",
+    "sku.construct.valid.maxBytes",
+    "sku.construct.invalid.aboveMaxBytes",
+    "order.construct.valid.injectedId",
+    "order.construct.invalid.mixedCurrency",
+    "placeOrder.execute.success.persistsPaid",
+    "placeOrder.execute.paymentDecline.releasesReservation",
+    "placeOrder.execute.persistenceConflict.refundsAndReleases",
+    "placeOrder.execute.compensationFailure.afterSaveFailure",
+    "placeOrder.execute.idempotency.replaySameCommand",
+    "placeOrder.execute.idempotency.reusedKeyDifferentPayload",
+    "placeOrder.execute.concurrent.noOversell",
+    "repository.save.invalid.versionConflict",
+    "repository.get.snapshot.aliasSafety"
+  ]
+}

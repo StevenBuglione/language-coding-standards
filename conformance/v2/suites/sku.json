@@ -1,0 +1,97 @@
+{
+  "contractVersion": "2",
+  "suite": "sku",
+  "cases": [
+    {
+      "id": "sku.construct.valid.plain",
+      "description": "A non-empty code is stored as given.",
+      "operation": "sku.construct",
+      "input": { "code": "SKU-A" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "SKU-A" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.stripSpaceTabCrLf",
+      "description": "Only ASCII space, tab, CR, and LF are stripped from the ends.",
+      "operation": "sku.construct",
+      "input": { "code": " \tSKU-A\r\n " },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "SKU-A" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.preserveInteriorSpace",
+      "description": "Interior spaces are part of the identity.",
+      "operation": "sku.construct",
+      "input": { "code": "SKU A" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "SKU A" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.preserveCase",
+      "description": "Case is preserved; sku-a is not SKU-A.",
+      "operation": "sku.construct",
+      "input": { "code": "sku-a" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "sku-a" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.unicode",
+      "description": "Non-ASCII text is allowed within the UTF-8 byte limit.",
+      "operation": "sku.construct",
+      "input": { "code": "café" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "café" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.maxBytes",
+      "description": "A 64-byte ASCII code is accepted.",
+      "operation": "sku.construct",
+      "input": { "code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }
+      }
+    },
+    {
+      "id": "sku.construct.valid.nbspPrefixKept",
+      "description": "U+00A0 is not ASCII whitespace and is not stripped.",
+      "operation": "sku.construct",
+      "input": { "code": "\u00a0ABC" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "code": "\u00a0ABC" }
+      }
+    },
+    {
+      "id": "sku.construct.invalid.empty",
+      "description": "An empty code is rejected.",
+      "operation": "sku.construct",
+      "input": { "code": "" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "sku.construct.invalid.whitespaceOnly",
+      "description": "A code that is empty after ASCII space/tab/CR/LF stripping is rejected.",
+      "operation": "sku.construct",
+      "input": { "code": " \t\r\n " },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "sku.construct.invalid.aboveMaxBytes",
+      "description": "A 65-byte ASCII code is rejected.",
+      "operation": "sku.construct",
+      "input": { "code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    }
+  ]
+}

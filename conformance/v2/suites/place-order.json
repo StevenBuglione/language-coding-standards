@@ -1,0 +1,374 @@
+{
+  "contractVersion": "2",
+  "suite": "placeOrder",
+  "cases": [
+    {
+      "id": "placeOrder.execute.success.persistsPaid",
+      "description": "Happy path: atomic reserveAll, charge, NEW to PAID, then persist. Current implementations persist NEW and therefore fail this vector.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-1",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false }
+      },
+      "input": {
+        "idempotencyKey": "idem-1",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "2",
+            "unitPrice": { "minorUnits": "300", "currency": "EUR" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "order": {
+            "id": "ord-1",
+            "status": "PAID",
+            "currency": "EUR",
+            "totalMinorUnits": "600",
+            "version": "1"
+          },
+          "effects": {
+            "reserveAllCalls": "1",
+            "chargeCalls": "1",
+            "saveCalls": "1",
+            "releaseCalls": "0",
+            "refundCalls": "0",
+            "inventoryAfter": { "SKU-A": "8" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.invalid.emptyLines.noSideEffects",
+      "description": "Invalid construction makes zero inventory, payment, or persistence calls.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-2",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false }
+      },
+      "input": { "idempotencyKey": "idem-2", "lines": [] },
+      "expect": {
+        "outcome": "error",
+        "error": "InvalidOrder",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "0",
+            "chargeCalls": "0",
+            "saveCalls": "0",
+            "releaseCalls": "0",
+            "refundCalls": "0",
+            "inventoryAfter": { "SKU-A": "10" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.insufficientStock.noPaymentOrSave",
+      "description": "Shortage is reported before payment or persistence.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-3",
+        "inventory": { "SKU-A": "1" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false }
+      },
+      "input": {
+        "idempotencyKey": "idem-3",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "5",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "error",
+        "error": "InsufficientStock",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "1",
+            "chargeCalls": "0",
+            "saveCalls": "0",
+            "releaseCalls": "0",
+            "refundCalls": "0",
+            "inventoryAfter": { "SKU-A": "1" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.paymentDecline.releasesReservation",
+      "description": "A declined charge releases the reservation and does not save. Error is PaymentDeclined, not InvalidOrder.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-4",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": true },
+        "repository": { "failSave": false, "failCompensation": false }
+      },
+      "input": {
+        "idempotencyKey": "idem-4",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "500", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "error",
+        "error": "PaymentDeclined",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "1",
+            "chargeCalls": "1",
+            "saveCalls": "0",
+            "releaseCalls": "1",
+            "refundCalls": "0",
+            "inventoryAfter": { "SKU-A": "10" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.persistenceConflict.refundsAndReleases",
+      "description": "Save failure refunds/voids the charge and releases stock.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-5",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": false },
+        "repository": { "failSave": true, "failCompensation": false }
+      },
+      "input": {
+        "idempotencyKey": "idem-5",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "500", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "error",
+        "error": "PersistenceConflict",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "1",
+            "chargeCalls": "1",
+            "saveCalls": "1",
+            "releaseCalls": "1",
+            "refundCalls": "1",
+            "inventoryAfter": { "SKU-A": "10" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.compensationFailure.afterSaveFailure",
+      "description": "When refund or release fails after a save failure, the error is CompensationFailure.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-6",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": false },
+        "repository": { "failSave": true, "failCompensation": true }
+      },
+      "input": {
+        "idempotencyKey": "idem-6",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "1",
+            "unitPrice": { "minorUnits": "500", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "error",
+        "error": "CompensationFailure",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "1",
+            "chargeCalls": "1",
+            "saveCalls": "1",
+            "releaseCalls": "1",
+            "refundCalls": "1"
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.idempotency.replaySameCommand",
+      "description": "Retrying the same idempotency key and payload returns the original PAID order without a second charge.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-7",
+        "inventory": { "SKU-A": "8" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false },
+        "completedCommands": [
+          {
+            "idempotencyKey": "idem-7",
+            "orderId": "ord-7",
+            "status": "PAID",
+            "chargeCalls": "1",
+            "payload": {
+              "lines": [
+                {
+                  "sku": "SKU-A",
+                  "quantity": "2",
+                  "unitPrice": { "minorUnits": "300", "currency": "EUR" }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "input": {
+        "idempotencyKey": "idem-7",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "2",
+            "unitPrice": { "minorUnits": "300", "currency": "EUR" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "order": {
+            "id": "ord-7",
+            "status": "PAID",
+            "totalMinorUnits": "600",
+            "currency": "EUR"
+          },
+          "effects": {
+            "reserveAllCalls": "0",
+            "chargeCalls": "0",
+            "saveCalls": "0",
+            "releaseCalls": "0",
+            "refundCalls": "0",
+            "inventoryAfter": { "SKU-A": "8" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.idempotency.reusedKeyDifferentPayload",
+      "description": "Reusing an idempotency key with a different payload is InvalidOrder.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "nextOrderId": "ord-8",
+        "inventory": { "SKU-A": "10" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false },
+        "completedCommands": [
+          {
+            "idempotencyKey": "idem-8",
+            "orderId": "ord-8",
+            "status": "PAID",
+            "payload": {
+              "lines": [
+                {
+                  "sku": "SKU-A",
+                  "quantity": "1",
+                  "unitPrice": { "minorUnits": "100", "currency": "USD" }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "input": {
+        "idempotencyKey": "idem-8",
+        "lines": [
+          {
+            "sku": "SKU-A",
+            "quantity": "2",
+            "unitPrice": { "minorUnits": "100", "currency": "USD" }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "error",
+        "error": "InvalidOrder",
+        "result": {
+          "effects": {
+            "reserveAllCalls": "0",
+            "chargeCalls": "0",
+            "saveCalls": "0",
+            "inventoryAfter": { "SKU-A": "10" }
+          }
+        }
+      }
+    },
+    {
+      "id": "placeOrder.execute.concurrent.noOversell",
+      "description": "Two competing reservations for the last units cannot both succeed.",
+      "operation": "placeOrder.execute",
+      "given": {
+        "clock": "2026-01-15T12:00:00Z",
+        "inventory": { "SKU-A": "5" },
+        "payment": { "decline": false },
+        "repository": { "failSave": false, "failCompensation": false },
+        "nextOrderIds": ["ord-9", "ord-10"]
+      },
+      "input": {
+        "concurrent": true,
+        "commands": [
+          {
+            "idempotencyKey": "idem-9a",
+            "lines": [
+              {
+                "sku": "SKU-A",
+                "quantity": "5",
+                "unitPrice": { "minorUnits": "100", "currency": "USD" }
+              }
+            ]
+          },
+          {
+            "idempotencyKey": "idem-9b",
+            "lines": [
+              {
+                "sku": "SKU-A",
+                "quantity": "5",
+                "unitPrice": { "minorUnits": "100", "currency": "USD" }
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "successfulPlacements": "1",
+          "insufficientStockCount": "1",
+          "successfulCharges": "1",
+          "effects": {
+            "inventoryAfter": { "SKU-A": "0" }
+          }
+        }
+      }
+    }
+  ]
+}

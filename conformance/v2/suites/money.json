@@ -1,0 +1,174 @@
+{
+  "contractVersion": "2",
+  "suite": "money",
+  "cases": [
+    {
+      "id": "money.construct.valid.zero",
+      "description": "Zero minor units is valid money.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "0", "currency": "USD" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "0", "currency": "USD" }
+      }
+    },
+    {
+      "id": "money.construct.valid.one",
+      "description": "One minor unit is valid money.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1", "currency": "EUR" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "1", "currency": "EUR" }
+      }
+    },
+    {
+      "id": "money.construct.valid.maxSafe",
+      "description": "The shared maximum 9007199254740991 is accepted.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "9007199254740991", "currency": "USD" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "9007199254740991", "currency": "USD" }
+      }
+    },
+    {
+      "id": "money.construct.valid.isoStyleZzz",
+      "description": "ZZZ is a valid ISO-style code. This is not ISO-4217 membership validation.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "0", "currency": "ZZZ" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "0", "currency": "ZZZ" }
+      }
+    },
+    {
+      "id": "money.construct.invalid.negative",
+      "description": "Negative minor units are rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "-1", "currency": "USD" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.lowercaseCurrency",
+      "description": "Lowercase currency codes are rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1", "currency": "usd" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.tooShortCurrency",
+      "description": "A two-letter currency code is rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1", "currency": "US" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.tooLongCurrency",
+      "description": "A four-letter currency code is rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1", "currency": "USDD" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.emptyCurrency",
+      "description": "An empty currency code is rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1", "currency": "" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.aboveMaxSafe",
+      "description": "One above the shared maximum is overflow, not silently truncated.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "9007199254740992", "currency": "USD" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.construct.invalid.fractional",
+      "description": "Fractional minor units are rejected.",
+      "operation": "money.construct",
+      "input": { "minorUnits": "1.5", "currency": "USD" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.add.valid.sameCurrency",
+      "description": "Same-currency addition is commutative on these inputs.",
+      "operation": "money.add",
+      "input": {
+        "left": { "minorUnits": "2", "currency": "USD" },
+        "right": { "minorUnits": "3", "currency": "USD" }
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "5", "currency": "USD" }
+      }
+    },
+    {
+      "id": "money.add.invalid.currencyMismatch",
+      "description": "Cross-currency addition is rejected before arithmetic.",
+      "operation": "money.add",
+      "input": {
+        "left": { "minorUnits": "2", "currency": "USD" },
+        "right": { "minorUnits": "3", "currency": "EUR" }
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.add.invalid.overflow",
+      "description": "Addition that exceeds the shared maximum is overflow.",
+      "operation": "money.add",
+      "input": {
+        "left": { "minorUnits": "9007199254740991", "currency": "USD" },
+        "right": { "minorUnits": "1", "currency": "USD" }
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.times.valid.scale",
+      "description": "Non-negative integer scaling is checked multiplication.",
+      "operation": "money.times",
+      "input": {
+        "amount": { "minorUnits": "300", "currency": "EUR" },
+        "multiplier": "2"
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "600", "currency": "EUR" }
+      }
+    },
+    {
+      "id": "money.times.valid.zeroMultiplier",
+      "description": "Scaling by zero yields zero in the same currency.",
+      "operation": "money.times",
+      "input": {
+        "amount": { "minorUnits": "300", "currency": "EUR" },
+        "multiplier": "0"
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": { "minorUnits": "0", "currency": "EUR" }
+      }
+    },
+    {
+      "id": "money.times.invalid.negativeMultiplier",
+      "description": "A negative multiplier is rejected.",
+      "operation": "money.times",
+      "input": {
+        "amount": { "minorUnits": "300", "currency": "EUR" },
+        "multiplier": "-1"
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "money.times.invalid.overflow",
+      "description": "Scaling that exceeds the shared maximum is overflow.",
+      "operation": "money.times",
+      "input": {
+        "amount": { "minorUnits": "4503599627370496", "currency": "USD" },
+        "multiplier": "2"
+      },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "contractVersion": "2",
+  "suite": "repository",
+  "cases": [
+    {
+      "id": "repository.save.valid.thenGetSnapshot",
+      "description": "Save then get returns an equivalent snapshot of the paid order.",
+      "operation": "repository.save",
+      "given": { "store": {} },
+      "input": {
+        "order": {
+          "id": "ord-1",
+          "status": "PAID",
+          "version": "0",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "saved": {
+            "id": "ord-1",
+            "status": "PAID",
+            "version": "1"
+          },
+          "get": {
+            "id": "ord-1",
+            "status": "PAID",
+            "version": "1"
+          }
+        }
+      }
+    },
+    {
+      "id": "repository.get.unknown.absent",
+      "description": "Unknown identifiers return absent; they never raise.",
+      "operation": "repository.get",
+      "given": { "store": {} },
+      "input": { "id": "missing-order" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "present": false }
+      }
+    },
+    {
+      "id": "repository.save.invalid.versionConflict",
+      "description": "Saving with a stale expected version is PersistenceConflict.",
+      "operation": "repository.save",
+      "given": {
+        "store": {
+          "ord-2": {
+            "id": "ord-2",
+            "status": "PAID",
+            "version": "1",
+            "lines": [
+              {
+                "sku": "SKU-A",
+                "quantity": "1",
+                "unitPrice": { "minorUnits": "100", "currency": "USD" }
+              }
+            ]
+          }
+        }
+      },
+      "input": {
+        "order": {
+          "id": "ord-2",
+          "status": "SHIPPED",
+          "version": "0",
+          "lines": [
+            {
+              "sku": "SKU-A",
+              "quantity": "1",
+              "unitPrice": { "minorUnits": "100", "currency": "USD" }
+            }
+          ]
+        }
+      },
+      "expect": { "outcome": "error", "error": "PersistenceConflict" }
+    },
+    {
+      "id": "repository.get.snapshot.aliasSafety",
+      "description": "Mutating a returned order must not change the stored snapshot.",
+      "operation": "repository.get",
+      "given": {
+        "store": {
+          "ord-3": {
+            "id": "ord-3",
+            "status": "PAID",
+            "version": "1",
+            "lines": [
+              {
+                "sku": "SKU-A",
+                "quantity": "1",
+                "unitPrice": { "minorUnits": "100", "currency": "USD" }
+              }
+            ]
+          }
+        }
+      },
+      "input": {
+        "id": "ord-3",
+        "mutateReturnedStatusTo": "SHIPPED"
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": {
+          "storedStatus": "PAID",
+          "storedVersion": "1"
+        }
+      }
+    }
+  ]
+}

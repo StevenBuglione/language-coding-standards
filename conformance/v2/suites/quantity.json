@@ -1,0 +1,68 @@
+{
+  "contractVersion": "2",
+  "suite": "quantity",
+  "cases": [
+    {
+      "id": "quantity.construct.valid.one",
+      "description": "The smallest strictly positive quantity is 1.",
+      "operation": "quantity.construct",
+      "input": { "value": "1" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "value": "1" }
+      }
+    },
+    {
+      "id": "quantity.construct.valid.max",
+      "description": "The shared maximum 2147483647 is accepted.",
+      "operation": "quantity.construct",
+      "input": { "value": "2147483647" },
+      "expect": {
+        "outcome": "ok",
+        "result": { "value": "2147483647" }
+      }
+    },
+    {
+      "id": "quantity.construct.invalid.zero",
+      "description": "Zero is not a quantity.",
+      "operation": "quantity.construct",
+      "input": { "value": "0" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "quantity.construct.invalid.negative",
+      "description": "Negative values are not a quantity.",
+      "operation": "quantity.construct",
+      "input": { "value": "-1" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "quantity.construct.invalid.booleanTrue",
+      "description": "JSON true / language boolean true is not an integer quantity. Python must reject bool, which is a subclass of int.",
+      "operation": "quantity.construct",
+      "input": { "value": true },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "quantity.construct.invalid.booleanFalse",
+      "description": "JSON false / language boolean false is not an integer quantity.",
+      "operation": "quantity.construct",
+      "input": { "value": false },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "quantity.construct.invalid.fraction",
+      "description": "Fractional values are not a quantity.",
+      "operation": "quantity.construct",
+      "input": { "value": "1.5" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    },
+    {
+      "id": "quantity.construct.invalid.aboveMax",
+      "description": "One above the shared maximum is rejected.",
+      "operation": "quantity.construct",
+      "input": { "value": "2147483648" },
+      "expect": { "outcome": "error", "error": "InvalidOrder" }
+    }
+  ]
+}

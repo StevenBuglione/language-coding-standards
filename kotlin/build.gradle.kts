@@ -2,9 +2,12 @@ import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
 
 plugins {
-    kotlin("jvm") version "2.1.20"
+    kotlin("jvm") version "2.2.10"
+    `maven-publish`
     application
     id("org.jlleitschuh.gradle.ktlint") version "12.3.0"
+    id("io.gitlab.arturbosch.detekt") version "1.23.8"
+    id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
 kotlin {
@@ -25,7 +28,53 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.jupiter:junit-jupiter-params")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.2")
+    testImplementation("io.kotest:kotest-property-jvm:5.9.1")
+    testImplementation("io.kotest:kotest-assertions-core-jvm:5.9.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    testImplementation("org.json:json:20250107")
     ktlintCli("com.pinterest.ktlint:ktlint-cli:1.5.0")
+}
+
+detekt {
+    toolVersion = "1.23.8"
+    buildUponDefaultConfig = true
+    parallel = true
+    source.setFrom("src/main/kotlin")
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                classes("com.warehouse.MainKt")
+            }
+        }
+        verify {
+            rule {
+                bound {
+                    minValue.set(70)
+                }
+            }
+        }
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("lib") {
+            groupId = "com.warehouse"
+            artifactId = "warehouse"
+            version = "1.0.0"
+            from(components["java"])
+        }
+    }
+    repositories {
+        maven {
+            name = "localBuild"
+            url = uri(layout.buildDirectory.dir("repo"))
+        }
+    }
 }
 
 ktlint {
@@ -63,6 +112,45 @@ tasks.register<Test>("unitTest") {
     configureJunit()
     filter {
         includeTestsMatching("com.warehouse.domain.*")
+        isFailOnNoMatchingTests = true
+    }
+}
+
+tasks.register<Test>("propertyTest") {
+    group = "verification"
+    description = "Kotest property tests (com.warehouse.property)"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    configureJunit()
+    filter {
+        includeTestsMatching("com.warehouse.property.*")
+        isFailOnNoMatchingTests = true
+    }
+}
+
+tasks.register<Test>("architectureTest") {
+    group = "verification"
+    description = "ArchUnit layer tests"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    configureJunit()
+    filter {
+        includeTestsMatching("com.warehouse.arch.*")
+        isFailOnNoMatchingTests = true
+    }
+}
+
+tasks.register<Test>("conformanceTest") {
+    group = "verification"
+    description = "Shared conformance/v2 JSON vectors"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    configureJunit()
+    filter {
+        includeTestsMatching("com.warehouse.conformance.*")
         isFailOnNoMatchingTests = true
     }
 }

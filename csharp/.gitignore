@@ -4,6 +4,8 @@ obj/
 .dotnet/
 .cache/
 TestResults/
+coverage*.xml
+coverage.json
 *.user
 *.suo
 *.csproj.user

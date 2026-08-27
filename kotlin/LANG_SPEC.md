@@ -19,7 +19,7 @@ capability. Experimental status means unimplemented gates must say
 | --- | --- | --- | --- | --- |
 | Runtime | JDK 21 (LTS) | `jvmToolchain(21)` | current LTS line used by the official Gradle image | <https://adoptium.net/> |
 | Image | `gradle:8.14-jdk21` | Dockerfile `FROM` | official image; Gradle 8.14.x + Temurin 21 + git | <https://hub.docker.com/_/gradle> |
-| Language | Kotlin JVM | `2.1.20` | Kotlin 2.x line compatible with Gradle 8.14 | <https://kotlinlang.org/docs/releases.html> |
+| Language | Kotlin JVM | `2.2.10` | current 2.2 line; Gradle 8.14 Kotlin DSL on JDK 25 needs a compiler that parses `25.0.x` | <https://kotlinlang.org/docs/releases.html> |
 | Build | Gradle Kotlin DSL | 8.14 via image (wrapper generated when present) | typed DSL; `allWarningsAsErrors` | <https://kotlinlang.org/docs/gradle-configure-project.html> |
 | Format + lint | ktlint via `org.jlleitschuh.gradle.ktlint` | plugin `12.3.0`, ktlint `1.5.0` | official Kotlin style; check-only | <https://github.com/JLLeitschuh/ktlint-gradle> |
 | Tests | JUnit Jupiter | BOM `5.11.4` | requested runner; zero-test filter fails | <https://junit.org/junit5/> |
@@ -43,26 +43,21 @@ capability, in canonical order.
    `bad_examples/lint/WildcardImport.kt` → `no-wildcard-imports`.
 4. **compile** — `compileKotlin compileTestKotlin` with
    `allWarningsAsErrors` and toolchain 21. Production and tests type-check.
-5. **architecture** — `SKIP_UNSUPPORTED(ArchUnit not yet wired in experimental pack)`.
+5. **architecture** — ArchUnit 1.3.2: domain ↛ application/adapters; application ↛ adapters.
 6. **unit** — Gradle `unitTest` (JUnit under `com.warehouse.domain.*`).
-   `failOnNoMatchingTests` makes an empty suite an error.
-7. **property** — `SKIP_UNSUPPORTED(kotest property not yet wired; jqwik denylisted)`.
-   jqwik ships an Anti-AI Usage Clause; this repository is agent-maintained.
-8. **integration** — Gradle `integrationTest` (JUnit under
-   `com.warehouse.application.*`) driving the place-order pipeline through
-   in-memory adapters, including compensation and idempotency.
+7. **property** — Kotest property 5.9.1 (jqwik remains denylisted).
+8. **integration** — Gradle `integrationTest` (`com.warehouse.application.*`).
 9. **package** — `installDist` then run the launcher; stdout must contain
    `warehouse-ok ZZZ`.
-10. **coverage** — `SKIP_UNSUPPORTED(Kover not yet wired in experimental pack)`.
-11. **dead-code** — `SKIP_UNSUPPORTED(no Kotlin unreachable-code gate wired)`.
-12. **sast** — `SKIP_UNSUPPORTED(detekt security not yet wired in experimental pack)`.
-13. **dependency-vulnerability** — `SKIP_UNSUPPORTED(no pinned JVM advisory scanner in this pack yet)`.
-14. **dependency-policy** — `SKIP_UNSUPPORTED(Gradle dependency analysis not yet wired)`.
-15. **lock-integrity** — `SKIP_UNSUPPORTED(Gradle dependency locking not yet wired)`.
+10. **coverage** — Kover 0.9.9 verify bound 70 (JetBrains Kotlin coverage).
+11. **dead-code** — `SKIP_UNSUPPORTED`.
+12. **sast** — detekt 1.23.8 (stable; detekt 2.x is still alpha as of 2026-08).
+13. **dependency-vulnerability** — `SKIP_UNSUPPORTED` (OWASP needs a pinned NVD store).
+14. **dependency-policy** — `gradle dependencies` (resolution against the graph).
+15. **lock-integrity** — `SKIP_UNSUPPORTED` until lockfiles are generated on JDK 21.
 16. **negative-fixtures** — `bash bad_examples/assert.sh`.
-17. **mutation** — `SKIP_UNSUPPORTED(PIT Kotlin bytecode mapping not yet fixture-proven)`.
-    Honest skip, never a fake pass (ADR-005 / AGENT_HANDOFF §19.3).
-18. **conformance** — `SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)`.
+17. **mutation** — `SKIP_UNSUPPORTED(PIT Kotlin bytecode mapping not fixture-proven)`.
+18. **conformance** — JUnit loads `conformance/v2/suites`.
 19. **reproducibility** — `SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)`.
 
 ## Domain notes

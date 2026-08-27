@@ -21,7 +21,7 @@ enter default `verify-all` or Compose until a maintainer opts in.
 | Concern | Tool | Pin | Why | Source |
 | --- | --- | --- | --- | --- |
 | Compiler | Swift 6.0 / SwiftPM | image tag `swift:6.0`; `// swift-tools-version: 6.0` | the image tag **is** the toolchain | <https://hub.docker.com/_/swift>, <https://www.swift.org/install/> |
-| Format | bundled `swift format` | toolchain | check-only `lint --strict`; repository style, not an official Swift mandate | <https://github.com/swiftlang/swift-format> |
+| Warnings | `-warnings-as-errors` via `unsafeFlags` | Swift 6.0 | `treatAllWarnings(as: .error)` is SwiftPM 6.2+ (SE-0480); 6.0 uses the same compiler flag | <https://github.com/swiftlang/swift-evolution/blob/main/proposals/0480-swiftpm-warning-control.md> |
 | Tests | Swift Testing | toolchain | `@Test` / `#expect` on Linux; XCTest remains available | <https://developer.apple.com/xcode/swift-testing/> |
 | Package | `swift build -c release` | toolchain | release library artifact; consumer fixture not yet wired | <https://docs.swift.org/swiftpm/> |
 
@@ -39,20 +39,20 @@ and exits nonzero on the first `FAIL`. Experimental skips are `SKIP_UNSUPPORTED`
 | `format` | `swift format lint --strict --recursive Sources Tests Package.swift` | `SKIP_UNSUPPORTED` when `swift format` is absent. |
 | `lint` | skip | No SwiftLint pin in this pack. |
 | `compile` | `swift build --build-tests` | Production and tests type-check. |
-| `architecture` | skip | Single library target; import-graph rules not generated. |
-| `unit` | `swift test` | Zero executed tests is `FAIL`. Place-order adapter tests run here. |
-| `property` | skip | No generative framework wired. |
-| `integration` | skip | Place-order tests currently live under `unit`. |
-| `package` | `swift build -c release` plus an artifact smoke | Looks for `Warehouse.swiftmodule` / `libWarehouse.*`. |
+| `architecture` | source scan of `Sources/Warehouse/Domain` | Domain files must not mention application/adapter types. |
+| `unit` | `swift test --filter` domain + conformance + property | Zero executed tests is `FAIL`. |
+| `property` | seeded Money commutativity tests | No third-party generator. |
+| `integration` | `swift test --filter PlaceOrderTests` | Adapter-wired place-order. |
+| `package` | `swift build -c release` plus a path-dependent consumer package | Clean consumer `swift build`. |
 | `coverage` | skip | `swift test --enable-code-coverage` floors not parsed. |
 | `dead-code` | skip | No unreachable-declaration detector. |
 | `sast` | skip | No source-level scanner. |
 | `dependency-vulnerability` | skip | No advisory source wired. |
 | `dependency-policy` | skip | No license/source policy tool. |
-| `lock-integrity` | skip | No third-party pins yet. |
+| `lock-integrity` | `Package.resolved` present | Zero third-party pins; the file is the fingerprint. |
 | `negative-fixtures` | `bad_examples/assert.sh` | Compile fixture always; format fixture when the tool exists. |
 | `mutation` | skip | No trustworthy Swift mutator; do not simulate one. |
-| `conformance` | skip | Shared JSON vectors not wired (WP4). |
+| `conformance` | Swift Testing loads `conformance/v2/suites` | Money, quantity, SKU, order. |
 | `reproducibility` | skip | Two-clean-build comparison is WP7 root evidence. |
 
 ## Domain mapping

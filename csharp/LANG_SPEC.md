@@ -38,15 +38,15 @@ exact SDK.
 | architecture | xUnit reflection tests: domain ↛ application/adapters; application ↛ adapters |
 | unit / property / integration | `dotnet test` on the matching project; zero executed tests fail the gate |
 | package | pack Domain, restore+run a temp consumer against the nupkg |
-| coverage | `SKIP_UNSUPPORTED` — Testing Platform coverage not yet wired |
+| coverage | coverlet.msbuild line floor 70 on unit tests (VSTest). MTP `Microsoft.Testing.Extensions.CodeCoverage` requires xUnit v3; this pack stays on xUnit 2.9 + coverlet until that migration. |
 | dead-code | `SKIP_UNSUPPORTED` — IDE0005 runs in compile; no reachability scanner |
 | sast | same Roslyn analyzer build as compile (`AnalysisMode` All) |
 | dependency-vulnerability | `dotnet list package --vulnerable --include-transitive` |
 | dependency-policy | `SKIP_UNSUPPORTED` — no license/unused-deps tool yet |
 | lock-integrity | `dotnet restore --locked-mode` |
 | negative-fixtures | `bad_examples/assert.sh` |
-| mutation | `SKIP_UNSUPPORTED` — Stryker.NET not trust-reviewed |
-| conformance | `SKIP_UNSUPPORTED` — shared JSON adapter not wired |
+| mutation | `SKIP_UNSUPPORTED` — Stryker.NET is maintained; not fixture-proven in this pack |
+| conformance | xUnit loads `conformance/v2/suites` (money, quantity, sku, order) |
 | reproducibility | `SKIP_UNSUPPORTED` — WP7 root evidence |
 
 Property tests are seeded generative xUnit theories, not FsCheck. FsCheck

@@ -81,14 +81,24 @@ run_package() {
     printf 'swift build -c release failed\n' >&2
     return 1
   fi
-  local hits
-  hits="$(find .build/release -iname '*warehouse*' 2>/dev/null || true)"
-  if [[ -z "${hits}" ]]; then
-    printf 'release build produced no Warehouse artifact\n' >&2
-    find .build/release -maxdepth 2 -print >&2 || true
-    return 1
-  fi
-  printf '%s\n' "${hits}"
+  local tmp
+  tmp="$(mktemp -d)"
+  mkdir -p "${tmp}/Consumer/Sources/Consumer"
+  cat >"${tmp}/Consumer/Package.swift" <<EOF
+// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(
+  name: "Consumer",
+  dependencies: [.package(path: "${PWD}")],
+  targets: [.executableTarget(name: "Consumer", dependencies: [.product(name: "Warehouse", package: "Warehouse")])]
+)
+EOF
+  printf 'import Warehouse\n@main struct Run { static func main() { _ = try? Money(minorUnits: 0, currency: "ZZZ") } }\n' \
+    >"${tmp}/Consumer/Sources/Consumer/main.swift"
+  (
+    cd "${tmp}/Consumer"
+    swift build
+  )
 }
 
 cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
@@ -108,16 +118,10 @@ for phase in "${phases[@]}"; do
       printf 'GATE lint: SKIP_UNSUPPORTED(no SwiftLint or equivalent pinned in this experimental pack)\n'
       ;;
     compile) gate compile swift build --build-tests ;;
-    architecture)
-      printf 'GATE architecture: SKIP_UNSUPPORTED(single library target; package graph rules not generated yet)\n'
-      ;;
-    unit) gate unit run_unit ;;
-    property)
-      printf 'GATE property: SKIP_UNSUPPORTED(no generative property framework wired yet)\n'
-      ;;
-    integration)
-      printf 'GATE integration: SKIP_UNSUPPORTED(place-order adapter tests currently run under unit)\n'
-      ;;
+    architecture) gate architecture swift test --filter ArchitectureTests ;;
+    unit) gate unit swift test --filter 'MoneyTests|QuantityTests|SkuTests|OrderTests|ConformanceTests|PropertyTests|ArchitectureTests' ;;
+    property) gate property swift test --filter PropertyTests ;;
+    integration) gate integration swift test --filter PlaceOrderTests ;;
     package) gate package run_package ;;
     coverage)
       printf 'GATE coverage: SKIP_UNSUPPORTED(swift test --enable-code-coverage floors not parsed yet)\n'
@@ -134,16 +138,12 @@ for phase in "${phases[@]}"; do
     dependency-policy)
       printf 'GATE dependency-policy: SKIP_UNSUPPORTED(no license/source policy tool wired yet)\n'
       ;;
-    lock-integrity)
-      printf 'GATE lock-integrity: SKIP_UNSUPPORTED(no third-party pins yet)\n'
-      ;;
+    lock-integrity) gate lock-integrity test -f Package.resolved ;;
     negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation)
       printf 'GATE mutation: SKIP_UNSUPPORTED(no trustworthy Swift mutator; do not simulate one)\n'
       ;;
-    conformance)
-      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
-      ;;
+    conformance) gate conformance swift test --filter ConformanceTests ;;
     reproducibility)
       printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
       ;;

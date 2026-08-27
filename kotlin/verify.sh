@@ -92,40 +92,28 @@ for phase in "${phases[@]}"; do
     format) gate format gradle_bin ktlintCheck ;;
     lint) gate lint gradle_bin ktlintCheck ;;
     compile) gate compile gradle_bin compileKotlin compileTestKotlin ;;
-    architecture)
-      printf 'GATE architecture: SKIP_UNSUPPORTED(ArchUnit not yet wired in experimental pack)\n'
-      ;;
+    architecture) gate architecture gradle_bin architectureTest ;;
     unit) gate unit run_unit ;;
-    property)
-      printf 'GATE property: SKIP_UNSUPPORTED(kotest property not yet wired; jqwik denylisted)\n'
-      ;;
+    property) gate property gradle_bin propertyTest ;;
     integration) gate integration run_integration ;;
     package) gate package run_package ;;
-    coverage)
-      printf 'GATE coverage: SKIP_UNSUPPORTED(Kover not yet wired in experimental pack)\n'
-      ;;
+    coverage) gate coverage gradle_bin koverVerify ;;
     dead-code)
-      printf 'GATE dead-code: SKIP_UNSUPPORTED(no Kotlin unreachable-code gate wired)\n'
+      printf 'GATE dead-code: SKIP_UNSUPPORTED(no Kotlin unreachable-code gate; detekt complexity is sast)\n'
       ;;
-    sast)
-      printf 'GATE sast: SKIP_UNSUPPORTED(detekt security not yet wired in experimental pack)\n'
-      ;;
+    sast) gate sast gradle_bin detekt ;;
     dependency-vulnerability)
-      printf 'GATE dependency-vulnerability: SKIP_UNSUPPORTED(no pinned JVM advisory scanner in this pack yet)\n'
+      printf 'GATE dependency-vulnerability: SKIP_UNSUPPORTED(OWASP Dependency-Check needs a pinned NVD store; not faked)\n'
       ;;
-    dependency-policy)
-      printf 'GATE dependency-policy: SKIP_UNSUPPORTED(Gradle dependency analysis not yet wired)\n'
-      ;;
+    dependency-policy) gate dependency-policy gradle_bin dependencies ;;
     lock-integrity)
-      printf 'GATE lock-integrity: SKIP_UNSUPPORTED(Gradle dependency locking not yet wired)\n'
+      printf 'GATE lock-integrity: SKIP_UNSUPPORTED(Gradle lockfiles need a JDK 21 writer; wrapper checksum is already pinned)\n'
       ;;
     negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation)
       printf 'GATE mutation: SKIP_UNSUPPORTED(PIT Kotlin bytecode mapping not yet fixture-proven)\n'
       ;;
-    conformance)
-      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
-      ;;
+    conformance) gate conformance gradle_bin conformanceTest ;;
     reproducibility)
       printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
       ;;

@@ -194,7 +194,7 @@ for phase in "${phases[@]}"; do
       ;;
     package) gate package run_package ;;
     coverage)
-      printf 'GATE coverage: SKIP_UNSUPPORTED(coverlet / Testing Platform coverage not yet wired)\n'
+      gate coverage dotnet test tests/Warehouse.UnitTests/Warehouse.UnitTests.csproj --no-restore -c Release --nologo /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:ThresholdType=line /p:Threshold=70
       ;;
     dead-code)
       printf 'GATE dead-code: SKIP_UNSUPPORTED(IDE0005 unused usings run as analyzers during compile; no dedicated reachability scanner)\n'
@@ -207,10 +207,10 @@ for phase in "${phases[@]}"; do
     lock-integrity) gate lock-integrity dotnet restore "${SOLUTION}" --locked-mode ;;
     negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation)
-      printf 'GATE mutation: SKIP_UNSUPPORTED(Stryker.NET not yet trust-reviewed for this pack)\n'
+      printf 'GATE mutation: SKIP_UNSUPPORTED(Stryker.NET is maintained but not fixture-proven here; no fake pass)\n'
       ;;
     conformance)
-      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
+      gate conformance run_tests tests/Warehouse.ConformanceTests/Warehouse.ConformanceTests.csproj
       ;;
     reproducibility)
       printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'

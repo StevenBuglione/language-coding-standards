@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { OrderAlreadyShipped } from "../../src/domain/errors";
 import { lineTotal, type OrderLine } from "../../src/domain/order";
-import { Order } from "../../src/domain/order";
+import { createOrderId, Order } from "../../src/domain/order";
 import { Money } from "../../src/domain/money";
 import { Quantity } from "../../src/domain/quantity";
 import { createSku } from "../../src/domain/sku";
@@ -42,7 +42,7 @@ describe("Order properties", () => {
         for (const line of remainingLines) {
           expected = expected.add(lineTotal(line));
         }
-        expect(new Order(lines).total().equals(expected)).toBe(true);
+        expect(new Order(lines, createOrderId("ord-prop")).total().equals(expected)).toBe(true);
       }),
     );
   });
@@ -50,7 +50,7 @@ describe("Order properties", () => {
   it("the full life cycle preserves the total and locks mutation", () => {
     fc.assert(
       fc.property(lineSpecs, (specs) => {
-        const order = new Order(toLines(specs));
+        const order = new Order(toLines(specs), createOrderId("ord-prop"));
         const originalTotal = order.total();
 
         order.pay();

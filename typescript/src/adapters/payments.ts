@@ -1,9 +1,9 @@
 /**
- * Fake payment adapter with a configurable decline switch.
+ * Fake payment adapter with idempotent charge and refund.
  */
 
-import type { ChargeResult, PaymentProcessor } from "../application/ports";
-import { InvalidOrder } from "../domain/errors";
+import type { ChargeReceipt, PaymentProcessor } from "../application/ports";
+import { CompensationFailure, PaymentDeclined } from "../domain/errors";
 import type { Order } from "../domain/order";
 
 /**
@@ -19,16 +19,28 @@ export interface FakePaymentProcessorOptions {
 /**
  * `PaymentProcessor` test double that records every charge attempt.
  *
- * Configure `decline: true` to make each collection fail with a typed
- * refusal instead of charging.
+ * Configure `decline: true` to refuse collection. Identical idempotency
+ * keys replay the original outcome without a second charge.
  */
 export class FakePaymentProcessor implements PaymentProcessor {
   private readonly decline: boolean;
+
+  private readonly receipts = new Map<string, ChargeReceipt | PaymentDeclined>();
+
+  /**
+   * When true, `refund` returns `CompensationFailure`.
+   */
+  failRefund = false;
 
   /**
    * Every order this processor was asked to charge, in attempt order.
    */
   readonly chargedOrders: Order[] = [];
+
+  /**
+   * Receipts successfully refunded, in attempt order.
+   */
+  readonly refunded: ChargeReceipt[] = [];
 
   /**
    * Starts in the configured outcome mode with an empty attempt log.
@@ -40,19 +52,39 @@ export class FakePaymentProcessor implements PaymentProcessor {
   }
 
   /**
-   * Records the attempt, then honors the configured outcome.
+   * Records the attempt unless this key already completed.
    *
    * @param order - the order being charged.
-   * @returns a discriminated charged/declined result.
+   * @param idempotencyKey - key that replays an existing charge outcome.
+   * @returns a receipt, or `PaymentDeclined` when collection is refused.
    */
-  charge(order: Order): ChargeResult {
+  charge(order: Order, idempotencyKey: string): ChargeReceipt | PaymentDeclined {
+    const existing = this.receipts.get(idempotencyKey);
+    if (existing !== undefined) {
+      return existing;
+    }
     this.chargedOrders.push(order);
     if (this.decline) {
-      return {
-        outcome: "declined",
-        error: new InvalidOrder(`payment declined for order ${order.id}`),
-      };
+      const declined = new PaymentDeclined(`payment declined for order ${order.id}`);
+      this.receipts.set(idempotencyKey, declined);
+      return declined;
     }
-    return { outcome: "charged" };
+    const receipt = { orderId: order.id, idempotencyKey };
+    this.receipts.set(idempotencyKey, receipt);
+    return receipt;
+  }
+
+  /**
+   * Voids a prior successful charge.
+   *
+   * @param receipt - receipt from a successful `charge`.
+   * @returns `undefined` on success, or `CompensationFailure` when configured to fail.
+   */
+  refund(receipt: ChargeReceipt): CompensationFailure | undefined {
+    if (this.failRefund) {
+      return new CompensationFailure("refund", "forced failure");
+    }
+    this.refunded.push(receipt);
+    return undefined;
   }
 }

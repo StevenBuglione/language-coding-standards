@@ -108,8 +108,9 @@ listed for decoration.
 
 `moduleResolution: "bundler"` matches how the template actually executes
 (vitest resolves modules like a bundler). `types: []` disables automatic
-`@types/*` injection; `@types/node` is pinned explicitly because the domain
-uses `crypto.randomUUID`.
+`@types/*` injection; `@types/node` is pinned for the Node toolchain
+while the domain receives injected `OrderId` values and never reads
+`crypto.randomUUID`.
 
 ## Gate-by-gate walkthrough
 
@@ -247,14 +248,13 @@ not exist anywhere in `src/` or `tests/`.
   every platform. This deviates from the tasking brief's git-based sketch.
 - **Coverage excludes `src/index.ts`.** It is a pure re-export surface with no
   executable statements; measuring it only produces a misleading 0% row.
-- **Money tightens integer checking to `Number.isSafeInteger`.** Python ints
-  are arbitrary precision; JS numbers are not. Amounts beyond
-  `Number.MAX_SAFE_INTEGER` raise `InvalidOrder` — an honest adaptation of
-  "integer minor units" to the platform.
-- **Currency validation is shape-level, not a live ISO-4217 table.** The
-  `/^[A-Z]{3}$/` pattern accepts any three uppercase letters — including
-  codes that merely look valid and ISO-4217's own `XXX` placeholder ("no
-  currency"). A maintained currency-code table is a data dependency the
+- **Money stores a JS `number` and checks overflow against the shared max
+  `9007199254740991`.** That ceiling is `Number.MAX_SAFE_INTEGER`; amounts
+  beyond it raise `InvalidOrder` — an honest adaptation of integer minor
+  units to IEEE-754. Addition and scaling fail closed on overflow rather
+  than wrapping or losing precision.
+- **Currency validation is ISO-style (`^[A-Z]{3}$`), not ISO-4217 membership.**
+  `ZZZ` is valid. A maintained currency-code table is a data dependency the
   domain does not need for this harness; tighten it only if a project
   actually settles in ambiguous codes.
 - **Order status getter is named `state`.** A public `status` accessor cannot

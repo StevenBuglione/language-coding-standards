@@ -1,97 +1,156 @@
 /**
  * Ports: interfaces the application owns and the adapters layer implements.
  *
- * Every fallible port returns a discriminated-union result instead of
- * raising: success carries its marker payload, failure carries exactly one
- * typed domain error (CONTRACTS.md §2).
+ * Fallible ports return a result union instead of raising (CONTRACTS.md §2).
  */
 
-import type { InsufficientStock, InvalidOrder } from "../domain/errors";
-import type { Order, OrderId } from "../domain/order";
-import type { Quantity } from "../domain/quantity";
-import type { Sku } from "../domain/sku";
+import type {
+  CompensationFailure,
+  InsufficientStock,
+  PaymentDeclined,
+  PersistenceConflict,
+} from "../domain/errors";
+import type { Order, OrderId, OrderLine } from "../domain/order";
 
 /**
- * Result of an inventory reservation attempt.
+ * Proof that stock for an order was reserved atomically.
  */
-export type ReserveResult =
-  | { readonly outcome: "reserved" }
-  | {
-      /**
-       * The reservation was refused: stock did not cover the request.
-       */
-      readonly outcome: "out-of-stock";
+export interface ReservationToken {
+  /**
+   * Identifier of the order the reservation belongs to.
+   */
+  readonly orderId: OrderId;
 
-      /**
-       * Exactly one typed failure: the stock shortage details.
-       */
-      readonly error: InsufficientStock;
-    };
+  /**
+   * Idempotency key that keyed the reservation.
+   */
+  readonly idempotencyKey: string;
+}
 
 /**
- * Result of a payment collection attempt.
+ * Proof that payment was collected for an idempotency key.
  */
-export type ChargeResult =
-  | { readonly outcome: "charged" }
-  | {
-      /**
-       * The collection was refused by the payment edge.
-       */
-      readonly outcome: "declined";
+export interface ChargeReceipt {
+  /**
+   * Identifier of the charged order.
+   */
+  readonly orderId: OrderId;
 
-      /**
-       * Exactly one typed failure: the refusal reason.
-       */
-      readonly error: InvalidOrder;
-    };
+  /**
+   * Idempotency key that keyed the charge.
+   */
+  readonly idempotencyKey: string;
+}
 
 /**
- * Outbound port for reserving stock on the inventory edge.
+ * Fingerprint and snapshot recorded for a previous successful command.
+ */
+export interface IdempotencyRecord {
+  /**
+   * Stable payload identity of the original command.
+   */
+  readonly fingerprint: string;
+
+  /**
+   * Snapshot of the persisted paid order.
+   */
+  readonly order: Order;
+}
+
+/**
+ * Outbound port that mints deterministic-in-tests order identifiers.
+ */
+export interface OrderIdGenerator {
+  /**
+   * Returns the next identifier.
+   */
+  next(): OrderId;
+}
+
+/**
+ * Outbound port for atomic stock reservation.
  */
 export interface InventoryGateway {
   /**
-   * Attempts a reservation; reports shortage as a typed failure.
+   * Reserves every line or none.
    *
-   * @param sku - the SKU to reserve.
-   * @param quantity - the strictly positive amount to reserve.
-   * @returns a discriminated success/shortage result.
+   * @param orderId - the order the reservation belongs to.
+   * @param lines - the lines to reserve.
+   * @param idempotencyKey - key that makes retries of the same command safe.
+   * @returns a reservation token, or `InsufficientStock` when any line falls short.
    */
-  reserve(sku: Sku, quantity: Quantity): ReserveResult;
+  reserveAll(
+    orderId: OrderId,
+    lines: readonly OrderLine[],
+    idempotencyKey: string,
+  ): ReservationToken | InsufficientStock;
+
+  /**
+   * Releases a previous reservation.
+   *
+   * @param token - token from a successful `reserveAll`.
+   * @returns `undefined` on success, or `CompensationFailure` when release fails.
+   */
+  release(token: ReservationToken): CompensationFailure | undefined;
 }
 
 /**
- * Outbound port for collecting payment on the payments edge.
+ * Outbound port for idempotent payment collection.
  */
 export interface PaymentProcessor {
   /**
-   * Attempts collection; reports refusal as a typed failure.
+   * Charges the order total; identical retries return the same receipt.
    *
    * @param order - the order to charge for.
-   * @returns a discriminated charged/declined result.
+   * @param idempotencyKey - key that makes retries of the same command safe.
+   * @returns a receipt, or `PaymentDeclined` when collection is refused.
    */
-  charge(order: Order): ChargeResult;
+  charge(order: Order, idempotencyKey: string): ChargeReceipt | PaymentDeclined;
+
+  /**
+   * Voids or refunds a prior charge.
+   *
+   * @param receipt - receipt from a successful `charge`.
+   * @returns `undefined` on success, or `CompensationFailure` when refund fails.
+   */
+  refund(receipt: ChargeReceipt): CompensationFailure | undefined;
 }
 
 /**
- * Outbound port that persists and retrieves orders.
+ * Outbound port that persists and retrieves immutable snapshots.
  */
 export interface OrderRepository {
   /**
-   * Persists the order and returns the persisted snapshot.
+   * Persists with compare-and-set semantics and returns a snapshot.
    *
    * @param order - the order to persist.
-   * @returns the persisted order.
+   * @param expectedVersion - the version the caller believes is stored.
+   * @returns a detached snapshot, or `PersistenceConflict` on a lost race.
    */
-  save(order: Order): Order;
+  save(order: Order, expectedVersion: number): Order | PersistenceConflict;
 
   /**
-   * Looks up an order by identifier.
-   *
-   * Absence is modeled as `undefined` and never raises (CONTRACTS.md §2:
-   * get never throws for an unknown identifier).
+   * Returns a stored snapshot or `undefined`; absence never raises.
    *
    * @param orderId - the identifier to look up.
-   * @returns the stored order, or undefined when absent.
+   * @returns the stored snapshot, or undefined when absent.
    */
   get(orderId: OrderId): Order | undefined;
+
+  /**
+   * Returns fingerprint and snapshot for a previous successful command.
+   *
+   * @param key - the idempotency key to look up.
+   * @returns the record, or undefined when this key has not succeeded.
+   */
+  getByIdempotencyKey(key: string): IdempotencyRecord | undefined;
+
+  /**
+   * Records a successful command so retries can replay.
+   *
+   * @param key - the idempotency key of the command.
+   * @param fingerprint - stable payload identity of the command.
+   * @param order - the persisted paid snapshot to replay.
+   */
+  rememberIdempotency(key: string, fingerprint: string, order: Order): void;
 }

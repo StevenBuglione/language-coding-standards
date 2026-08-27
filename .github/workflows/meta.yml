@@ -124,6 +124,8 @@ jobs:
         run: python3 conformance/v2/validate.py
       - name: Conformance unit tests
         run: python3 -m unittest discover -s conformance/v2/tests
+      - name: Validate manifest against every implemented pack
+        run: python3 scripts/manifest.py --check
       - name: Manifest default selection
         run: |
           mapfile -t langs < <(python3 scripts/manifest.py --list)

@@ -17,29 +17,38 @@ import manifest  # noqa: E402
 
 
 class ManifestLoadTests(unittest.TestCase):
-    def test_default_selection_is_the_five_implemented_languages(self) -> None:
+    def test_default_selection_is_the_five_default_languages(self) -> None:
         ids = [lang.id for lang in manifest.select()]
         self.assertEqual(ids, ["go", "java", "python", "rust", "typescript"])
 
-    def test_in_default_false_is_excluded_even_if_experimental(self) -> None:
-        catalog = manifest.load()
-        for lang in catalog.values():
+    def test_in_default_false_is_excluded_even_if_implemented(self) -> None:
+        selected = [item.id for item in manifest.select()]
+        for lang in manifest.load().values():
             if not lang.in_default:
-                self.assertNotIn(lang.id, [item.id for item in manifest.select()])
+                self.assertNotIn(lang.id, selected)
 
-    def test_planned_languages_are_excluded_from_defaults(self) -> None:
+    def test_opted_out_languages_are_excluded_from_defaults(self) -> None:
         ids = {lang.id for lang in manifest.select()}
         self.assertNotIn("csharp", ids)
         self.assertNotIn("kotlin", ids)
         self.assertNotIn("swift", ids)
 
-    def test_planned_filter_lists_only_planned(self) -> None:
+    def test_planned_filter_is_empty_when_no_pack_is_planned(self) -> None:
         ids = [lang.id for lang in manifest.select(states=["planned"])]
         self.assertEqual(ids, [])
 
     def test_unknown_language_exits_64(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(MANIFEST_PY), "cobol"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 64, completed.stderr)
+
+    def test_unknown_state_exits_64(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(MANIFEST_PY), "--state", "unknown"],
             check=False,
             capture_output=True,
             text=True,
@@ -91,12 +100,20 @@ class ManifestLoadTests(unittest.TestCase):
             ["go", "java", "python", "rust", "typescript"],
         )
 
-    def test_candidate_or_reference_must_have_required_files(self) -> None:
-        errors = manifest.validate_on_disk(ROOT)
-        blocking = [error for error in errors if "candidate" in error or "reference" in error]
-        self.assertEqual(blocking, [])
+    def test_every_implemented_pack_matches_the_manifest(self) -> None:
+        self.assertEqual(manifest.validate_on_disk(ROOT), [])
 
-    def test_compose_omits_planned_languages(self) -> None:
+    def test_check_cli_validates_repository_state(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(MANIFEST_PY), "--check"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.strip(), "manifest: PASS")
+
+    def test_compose_omits_opted_out_languages(self) -> None:
         text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
         self.assertNotRegex(text, r"(?m)^\s+csharp:")
         self.assertNotRegex(text, r"(?m)^\s+kotlin:")

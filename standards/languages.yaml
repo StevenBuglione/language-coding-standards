@@ -11,23 +11,23 @@
       "dockerfile": "go/Dockerfile",
       "spec": "go/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "Go 1.26",
+      "toolchain": "Go 1.26 compatibility baseline",
       "composeService": "go",
-      "artifact": "module",
+      "artifact": "module + executable smoke artifact",
       "os": ["linux"],
       "image": {
         "repository": "golang",
         "tag": "1.26-bookworm",
         "digest": null
       },
-      "propertyTesting": "testing/quick + native fuzz",
-      "architecture": "internal/package boundaries + golangci-lint",
+      "propertyTesting": "deterministic stdlib invariant suites",
+      "architecture": "internal/package boundaries + golangci-lint depguard",
       "sast": "gosec via golangci-lint",
       "dependencyVulnerability": "govulncheck",
       "requiredCapabilities": [
         "bootstrap", "format", "lint", "compile", "architecture",
-        "unit", "property", "integration", "coverage", "dead-code",
-        "sast", "dependency-vulnerability", "lock-integrity",
+        "unit", "property", "integration", "package", "coverage", "dead-code",
+        "sast", "dependency-vulnerability", "dependency-policy", "lock-integrity",
         "negative-fixtures"
       ]
     },
@@ -40,23 +40,23 @@
       "dockerfile": "java/Dockerfile",
       "spec": "java/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "JDK 25 + Maven 3.9 wrapper",
+      "toolchain": "JDK 25 + Maven 3.9.16 wrapper",
       "composeService": "java",
-      "artifact": "jar",
+      "artifact": "installed JAR + clean javac consumer",
       "os": ["linux"],
       "image": {
         "repository": "maven",
         "tag": "3.9-eclipse-temurin-25",
         "digest": null
       },
-      "propertyTesting": "pending reviewed replacement (jqwik denylisted)",
+      "propertyTesting": "deterministic seeded JUnit invariants (jqwik intentionally absent)",
       "architecture": "ArchUnit",
       "sast": "SpotBugs/FindSecBugs",
-      "dependencyVulnerability": "pending",
+      "dependencyVulnerability": "unsupported; no pinned scanner yet",
       "requiredCapabilities": [
         "bootstrap", "format", "lint", "compile", "architecture",
-        "unit", "integration", "coverage", "sast", "lock-integrity",
-        "negative-fixtures"
+        "unit", "property", "integration", "package", "coverage", "sast",
+        "dependency-policy", "lock-integrity", "negative-fixtures"
       ]
     },
     "python": {
@@ -68,24 +68,24 @@
       "dockerfile": "python/Dockerfile",
       "spec": "python/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "CPython 3.13 + uv 0.12.6",
+      "toolchain": "CPython 3.13 compatibility baseline + uv 0.12.6",
       "composeService": "python",
-      "artifact": "wheel",
+      "artifact": "wheel installed into a clean virtualenv",
       "os": ["linux"],
       "image": {
         "repository": "python",
         "tag": "3.13-slim",
         "digest": null
       },
-      "propertyTesting": "hypothesis",
+      "propertyTesting": "Hypothesis",
       "architecture": "import-linter",
-      "sast": "ruff",
-      "dependencyVulnerability": "pip-audit",
+      "sast": "Ruff security rules",
+      "dependencyVulnerability": "pip-audit against locked third-party pins",
       "requiredCapabilities": [
         "bootstrap", "format", "lint", "compile", "architecture",
-        "unit", "property", "integration", "coverage", "dead-code",
+        "unit", "property", "integration", "package", "coverage", "dead-code",
         "sast", "dependency-vulnerability", "lock-integrity",
-        "negative-fixtures"
+        "negative-fixtures", "conformance"
       ]
     },
     "rust": {
@@ -99,20 +99,20 @@
       "owner": "unassigned",
       "toolchain": "Rust 1.98.0",
       "composeService": "rust",
-      "artifact": "crate",
+      "artifact": "Cargo crate verified from extracted package contents",
       "os": ["linux"],
       "image": {
         "repository": "rust",
         "tag": "1.98.0-bookworm",
         "digest": null
       },
-      "propertyTesting": "proptest / cargo fuzz (partial)",
+      "propertyTesting": "proptest integration-test targets",
       "architecture": "workspace crate boundaries",
-      "sast": "clippy",
-      "dependencyVulnerability": "cargo-deny",
+      "sast": "Clippy warnings denied",
+      "dependencyVulnerability": "cargo-deny advisories",
       "requiredCapabilities": [
         "bootstrap", "format", "lint", "compile", "architecture",
-        "unit", "integration", "coverage", "sast",
+        "unit", "property", "integration", "package", "coverage", "sast",
         "dependency-vulnerability", "dependency-policy", "lock-integrity",
         "negative-fixtures"
       ]
@@ -126,9 +126,9 @@
       "dockerfile": "typescript/Dockerfile",
       "spec": "typescript/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "Node 24 + pnpm via Corepack",
+      "toolchain": "Node 24 + pnpm 11.24.0 + TypeScript 6.0.2",
       "composeService": "typescript",
-      "artifact": "package",
+      "artifact": "tarball installed, type-checked, and executed by a clean consumer",
       "os": ["linux"],
       "image": {
         "repository": "node",
@@ -137,12 +137,13 @@
       },
       "propertyTesting": "fast-check",
       "architecture": "dependency-cruiser",
-      "sast": "eslint-plugin-security (partial) / CodeQL pending",
-      "dependencyVulnerability": "pnpm audit (must not audit empty production set)",
+      "sast": "ESLint security bans + repository CodeQL",
+      "dependencyVulnerability": "pnpm audit across the complete lockfile",
       "requiredCapabilities": [
         "bootstrap", "format", "lint", "compile", "architecture",
-        "unit", "property", "integration", "coverage", "dead-code",
-        "dependency-policy", "lock-integrity", "negative-fixtures"
+        "unit", "property", "integration", "package", "coverage", "dead-code",
+        "dependency-vulnerability", "dependency-policy", "lock-integrity",
+        "negative-fixtures"
       ]
     },
     "csharp": {
@@ -155,23 +156,23 @@
       "dockerfile": "csharp/Dockerfile",
       "spec": "csharp/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": ".NET 9 SDK (global.json, rollForward: latestFeature)",
+      "toolchain": ".NET 9 SDK compatibility baseline (migration to .NET 10 LTS required)",
       "composeService": null,
-      "artifact": "nupkg",
+      "artifact": "NuGet package installed and executed by a clean consumer",
       "os": ["linux"],
       "image": {
         "repository": "mcr.microsoft.com/dotnet/sdk",
         "tag": "9.0",
         "digest": null
       },
-      "propertyTesting": "seeded generative xUnit (FsCheck pending)",
+      "propertyTesting": "seeded generative xUnit",
       "architecture": "project-reference boundaries + reflection tests",
       "sast": "Roslyn analyzers (AnalysisMode All)",
       "dependencyVulnerability": "dotnet list package --vulnerable",
       "requiredCapabilities": [
-        "bootstrap", "format", "compile", "architecture",
-        "unit", "property", "integration", "package",
-        "sast", "lock-integrity", "negative-fixtures"
+        "bootstrap", "format", "compile", "architecture", "unit", "property",
+        "integration", "package", "coverage", "sast", "dependency-vulnerability",
+        "lock-integrity", "negative-fixtures", "conformance"
       ]
     },
     "kotlin": {
@@ -183,9 +184,9 @@
       "dockerfile": "kotlin/Dockerfile",
       "spec": "kotlin/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "Kotlin 2.1.20 + Gradle 8.14 + JDK 21",
+      "toolchain": "Kotlin 2.2.10 + Gradle 8.14.3 wrapper + JDK 21",
       "composeService": null,
-      "artifact": "jar",
+      "artifact": "application distribution executed by the package gate",
       "os": ["linux"],
       "inDefault": false,
       "image": {
@@ -193,13 +194,14 @@
         "tag": "8.14-jdk21",
         "digest": null
       },
-      "propertyTesting": "pending (jqwik denylisted; kotest property not yet wired)",
-      "architecture": "pending ArchUnit",
-      "sast": "pending detekt",
-      "dependencyVulnerability": "pending",
+      "propertyTesting": "Kotest property",
+      "architecture": "ArchUnit",
+      "sast": "detekt 1.23.8 + ktlint",
+      "dependencyVulnerability": "unsupported; pinned NVD store not wired",
       "requiredCapabilities": [
-        "bootstrap", "format", "lint", "compile",
-        "unit", "integration", "package", "negative-fixtures"
+        "bootstrap", "format", "lint", "compile", "architecture", "unit",
+        "property", "integration", "package", "coverage", "sast",
+        "dependency-policy", "lock-integrity", "negative-fixtures", "conformance"
       ]
     },
     "swift": {
@@ -211,21 +213,22 @@
       "dockerfile": "swift/Dockerfile",
       "spec": "swift/LANG_SPEC.md",
       "owner": "unassigned",
-      "toolchain": "Swift 6.0 (SwiftPM)",
+      "toolchain": "Swift 6.0 compatibility baseline (Linux)",
       "composeService": null,
-      "artifact": "swiftpm library",
+      "artifact": "SwiftPM library built by a clean consumer package",
       "os": ["linux"],
       "image": {
         "repository": "swift",
         "tag": "6.0",
         "digest": null
       },
-      "propertyTesting": "pending (Swift Testing examples only)",
-      "architecture": "pending (single library target)",
-      "sast": "pending",
-      "dependencyVulnerability": "pending",
+      "propertyTesting": "deterministic Swift Testing invariants",
+      "architecture": "module/import boundary tests",
+      "sast": "unsupported locally; repository CodeQL does not analyze Swift",
+      "dependencyVulnerability": "unsupported",
       "requiredCapabilities": [
-        "bootstrap", "compile", "unit", "package", "negative-fixtures"
+        "bootstrap", "compile", "architecture", "unit", "property",
+        "integration", "package", "lock-integrity", "negative-fixtures", "conformance"
       ],
       "inDefault": false
     }

@@ -1,8 +1,9 @@
 //! Typed domain errors raised by the pure domain layer.
 //!
-//! Exactly three rule verdicts exist ([CONTRACTS.md §2](../../docs/CONTRACTS.md)):
-//! [`InvalidOrder`], [`InsufficientStock`], and [`OrderAlreadyShipped`].
-//! [`DomainError`] bundles them where a call site can produce more than one.
+//! The v2 vocabulary is [`InvalidOrder`], [`InsufficientStock`],
+//! [`PaymentDeclined`], [`PersistenceConflict`], [`CompensationFailure`],
+//! and [`OrderAlreadyShipped`]. [`DomainError`] bundles the verdicts that
+//! order transitions can produce.
 
 use crate::order::OrderId;
 use crate::quantity::Quantity;
@@ -70,8 +71,85 @@ impl InsufficientStock {
     }
 }
 
+/// The payment processor refused to charge the order.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("payment declined: {reason}")]
+pub struct PaymentDeclined {
+    reason: String,
+}
+
+impl PaymentDeclined {
+    /// Records why the charge was refused.
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+
+    /// Returns the human-readable refusal reason.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+/// An optimistic save lost a compare-and-set race.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("persistence conflict: {reason}")]
+pub struct PersistenceConflict {
+    reason: String,
+}
+
+impl PersistenceConflict {
+    /// Records why the compare-and-set failed.
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+
+    /// Returns the human-readable conflict reason.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+/// Refund or reservation release failed after a partial success.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("compensation failed at {stage}: {detail}")]
+pub struct CompensationFailure {
+    stage: String,
+    detail: String,
+}
+
+impl CompensationFailure {
+    /// Records which compensation step failed and why.
+    #[must_use]
+    pub fn new(stage: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            stage: stage.into(),
+            detail: detail.into(),
+        }
+    }
+
+    /// Returns the compensation stage that failed (`refund` or `release`).
+    #[must_use]
+    pub fn stage(&self) -> &str {
+        &self.stage
+    }
+
+    /// Returns the human-readable failure detail.
+    #[must_use]
+    pub fn detail(&self) -> &str {
+        &self.detail
+    }
+}
+
 /// A shipped order can no longer be mutated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("order {id} has already shipped")]
 pub struct OrderAlreadyShipped {
     id: OrderId,
@@ -86,16 +164,16 @@ impl OrderAlreadyShipped {
 
     /// Returns the identifier of the shipped order.
     #[must_use]
-    pub fn id(&self) -> OrderId {
-        self.id
+    pub fn id(&self) -> &OrderId {
+        &self.id
     }
 }
 
-/// Exactly one of the three canonical domain-rule verdicts.
+/// Verdicts that order transitions can produce.
 ///
-/// Call sites that can produce several verdicts (the `Order` transitions)
-/// return this enum; ports narrow it down to the single verdict they can
-/// raise.
+/// Ports narrow this down to the single verdict they can raise. Decline,
+/// conflict, and compensation stay as their own types so they are never
+/// mislabeled as [`InvalidOrder`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DomainError {
     /// The inventory cannot cover the request.
@@ -143,10 +221,35 @@ mod tests {
     }
 
     #[test]
+    fn payment_declined_is_not_an_invalid_order() {
+        let error = PaymentDeclined::new("card refused");
+        assert_eq!(error.reason(), "card refused");
+        assert_eq!(error.to_string(), "payment declined: card refused");
+    }
+
+    #[test]
+    fn persistence_conflict_carries_its_reason() {
+        let error = PersistenceConflict::new("version 0 vs 1");
+        assert_eq!(error.reason(), "version 0 vs 1");
+        assert!(error.to_string().contains("persistence conflict"));
+    }
+
+    #[test]
+    fn compensation_failure_names_the_stage() {
+        let error = CompensationFailure::new("refund", "forced failure");
+        assert_eq!(error.stage(), "refund");
+        assert_eq!(error.detail(), "forced failure");
+        assert_eq!(
+            error.to_string(),
+            "compensation failed at refund: forced failure"
+        );
+    }
+
+    #[test]
     fn already_shipped_names_the_order() {
-        let id = OrderId::next();
-        let error = OrderAlreadyShipped::new(id);
-        assert_eq!(error.id(), id);
+        let id = OrderId::new("ord-1").unwrap();
+        let error = OrderAlreadyShipped::new(id.clone());
+        assert_eq!(error.id(), &id);
         assert_eq!(error.to_string(), format!("order {id} has already shipped"));
     }
 
@@ -154,7 +257,7 @@ mod tests {
     fn domain_error_is_transparent_over_its_variants() {
         let verdict = DomainError::from(InvalidOrder::new("boom"));
         assert_eq!(verdict.to_string(), "invalid order: boom");
-        match DomainError::from(OrderAlreadyShipped::new(OrderId::next())) {
+        match DomainError::from(OrderAlreadyShipped::new(OrderId::from_sequence(1))) {
             DomainError::AlreadyShipped(_) => {}
             other => panic!("expected already-shipped variant, got {other:?}"),
         }

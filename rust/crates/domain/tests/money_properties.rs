@@ -11,7 +11,7 @@
 use proptest::prelude::*;
 use warehouse_domain::money::{Currency, Money};
 
-/// Amount cap keeps every sum in these properties far below `u64` overflow.
+/// Amount cap keeps every sum in these properties far below the shared max.
 const MAX_AMOUNT: u64 = 1_000_000_000_000;
 
 /// Fixed valid currency pool; index selects into it without slicing.
@@ -34,8 +34,8 @@ proptest! {
         currency_index in any::<usize>(),
     ) {
         let currency = currency(currency_index);
-        let a = Money::from_minor(left, currency.clone());
-        let b = Money::from_minor(right, currency);
+        let a = Money::from_minor(left, currency.clone()).unwrap();
+        let b = Money::from_minor(right, currency).unwrap();
         assert_eq!(a.add(&b).unwrap(), b.add(&a).unwrap());
     }
 
@@ -51,8 +51,8 @@ proptest! {
         // offset is 1 or 2, so `(a_index + offset) % 3` never equals
         // `a_index`: the two currencies are always distinct.
         let b_index = (a_index + offset) % 3;
-        let first = Money::from_minor(left, currency(a_index));
-        let second = Money::from_minor(right, currency(b_index));
+        let first = Money::from_minor(left, currency(a_index)).unwrap();
+        let second = Money::from_minor(right, currency(b_index)).unwrap();
         prop_assert_ne!(first.currency(), second.currency());
         let forward = first.add(&second).unwrap_err();
         let backward = second.add(&first).unwrap_err();

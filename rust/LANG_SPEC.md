@@ -234,8 +234,10 @@ oversight.
   affordable nightly, pointless as a PR gate. The kill-score floor activates
   when the nightly tier schedules it (`VERIFY_TIER=full`); until then the
   phase skips loudly rather than pretending.
-- **OrderId is a process-local counter, not a UUID.** Avoiding a uuid crate
-  for one value object keeps the deliberate-dependency budget at thiserror +
+- **OrderId is injected, not minted in the domain.** The aggregate
+  constructor receives an `OrderId`; a process-local sequence generator
+  lives in adapters so the domain never reads ambient counters. Avoiding a
+  uuid crate keeps the deliberate-dependency budget at thiserror +
   proptest(dev). Uniqueness holds within a process; cross-restart uniqueness
   belongs to whatever storage backs the repository. Documented on the type.
 - **Adapters dev-dependency in application.** Integration tests wiring real

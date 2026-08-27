@@ -44,6 +44,7 @@ class Language:
     os: tuple[str, ...]
     image: Image
     required_capabilities: tuple[str, ...]
+    in_default: bool
 
 
 def load(path: Path = DEFAULT_MANIFEST) -> dict[str, Language]:
@@ -74,6 +75,7 @@ def load(path: Path = DEFAULT_MANIFEST) -> dict[str, Language]:
                 digest=image.get("digest"),
             ),
             required_capabilities=tuple(item.get("requiredCapabilities") or ()),
+            in_default=bool(item.get("inDefault", True)),
         )
         if languages[lang_id].state not in VALID_STATES:
             raise ValueError(f"{lang_id}: invalid state {languages[lang_id].state!r}")
@@ -103,6 +105,8 @@ def select(
 
     wanted_states = tuple(states) if states else IMPLEMENTED_STATES
     selected = [lang for lang in catalog.values() if lang.state in wanted_states]
+    if states is None and not ids:
+        selected = [lang for lang in selected if lang.in_default]
     if capability:
         selected = [lang for lang in selected if capability in lang.required_capabilities]
     return selected

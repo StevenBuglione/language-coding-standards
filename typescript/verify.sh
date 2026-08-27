@@ -12,49 +12,15 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=capabilities.sh
+source ./capabilities.sh
 
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
 
-readonly ALL_PHASES=(
-  deps format lint types arch test coverage deadcode security deps-hygiene negative
-)
-
 usage() {
-  printf 'usage: %s [phase...]\nphases: %s mutation\n' \
-    "${0##*/}" "$(IFS=' '; echo "${ALL_PHASES[*]}")" >&2
-}
-
-select_phases() {
-  local requested
-  if (($# == 0)); then
-    printf '%s\n' "${ALL_PHASES[@]}"
-    return 0
-  fi
-  local phases=()
-  for requested in "$@"; do
-    case "${requested}" in
-      deps | format | lint | types | arch | test | coverage | deadcode | security | deps-hygiene | negative | mutation)
-        phases+=("${requested}")
-        ;;
-      *)
-        printf 'unknown phase: %s\n' "${requested}" >&2
-        usage
-        return 64
-        ;;
-    esac
-  done
-  # Reorder the requested subset into canonical order.
-  local ordered=()
-  for requested in "${ALL_PHASES[@]}" mutation; do
-    local candidate
-    for candidate in "${phases[@]}"; do
-      if [[ "${candidate}" == "${requested}" ]]; then
-        ordered+=("${candidate}")
-      fi
-    done
-  done
-  printf '%s\n' "${ordered[@]}"
+  printf 'usage: %s [capability...]\n' "${0##*/}" >&2
+  printf 'capabilities: %s\n' "${CANONICAL_CAPABILITIES[*]}" >&2
 }
 
 gate() {
@@ -93,11 +59,9 @@ run_deps() {
 }
 
 run_security() {
-  # No production runtime dependency exists in this template (everything is
-  # devDependencies), so --prod audits exactly what would ship: an empty set
-  # must still pass cleanly. The honest gap — no free TS SAST — is documented
-  # in LANG_SPEC.md's non-enforcements table.
-  pnpm audit --prod --audit-level high
+  # Audit the complete lockfile, including toolchain/devDependencies. An
+  # empty production set is not meaningful security coverage.
+  pnpm audit --audit-level high
 }
 
 run_deps_hygiene() {
@@ -124,44 +88,64 @@ run_deps_hygiene() {
 }
 
 run_mutation() {
-  if [[ "${VERIFY_TIER:-}" == "full" ]]; then
-    # Nightly tier: StrykerJS runs with its own break threshold from
-    # stryker.config.json (break=70); a score below it exits nonzero and
-    # fails the gate without any output parsing here.
-    local log rc
-    log="$(mktemp)"
-    rc=0
-    pnpm exec stryker run >"${log}" 2>&1 || rc=$?
-    tail -n 40 "${log}" >&2 || true
-    rm -f "${log}"
-    if ((rc != 0)); then
-      printf 'GATE mutation: FAIL (stryker exited %s)\n' "${rc}"
-      exit "${rc}"
-    fi
-    printf 'GATE mutation: PASS\n'
-  else
-    printf 'GATE mutation: SKIP (nightly tier only)\n'
+  if [[ "${VERIFY_TIER:-}" != "full" ]]; then
+    printf 'GATE mutation: SKIP_UNSUPPORTED(full tier only)\n'
+    return 0
   fi
+  local log rc
+  log="$(mktemp)"
+  rc=0
+  pnpm exec stryker run >"${log}" 2>&1 || rc=$?
+  tail -n 40 "${log}" >&2 || true
+  rm -f "${log}"
+  if ((rc != 0)); then
+    printf 'GATE mutation: FAIL (stryker exited %s)\n' "${rc}"
+    exit "${rc}"
+  fi
+  printf 'GATE mutation: PASS\n'
 }
 
-phase_list="$(select_phases "$@")" || exit $?
-mapfile -t phases <<<"${phase_list}"
+run_package() {
+  pnpm exec tsc --pretty false
+  local tmp
+  tmp="$(mktemp -d)"
+  pnpm pack --pack-destination "${tmp}"
+  rm -rf "${tmp}"
+}
+
+cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
+mapfile -t phases <<<"${cap_list}"
 
 for phase in "${phases[@]}"; do
   case "${phase}" in
-    deps) gate deps run_deps ;;
+    bootstrap) gate bootstrap run_deps ;;
     format) gate format pnpm exec prettier --check . ;;
     lint) gate lint pnpm exec eslint . --report-unused-disable-directives ;;
-    types) gate types pnpm exec tsc --noEmit ;;
-    arch) gate arch pnpm exec depcruise src ;;
-    test) gate test pnpm exec vitest run ;;
+    compile) gate compile pnpm exec tsc --noEmit ;;
+    architecture) gate architecture pnpm exec depcruise src ;;
+    unit) gate unit pnpm exec vitest run tests/unit ;;
+    property) gate property pnpm exec vitest run tests/property ;;
+    integration) gate integration pnpm exec vitest run tests/integration ;;
+    package) gate package run_package ;;
     coverage) gate coverage pnpm exec vitest run --coverage ;;
-    deadcode) gate deadcode pnpm exec knip ;;
-    # run_security wraps the audit so a failed invocation prints
-    # "GATE security: FAIL (...)" instead of dying under set -e silently.
-    security) gate security run_security ;;
-    deps-hygiene) gate deps-hygiene run_deps_hygiene ;;
-    negative) gate negative bash bad_examples/assert.sh ;;
+    dead-code) gate dead-code pnpm exec knip ;;
+    sast)
+      printf 'GATE sast: SKIP_UNSUPPORTED(eslint security plugin not installed; CodeQL is the repo-level SAST)\n'
+      ;;
+    dependency-vulnerability) gate dependency-vulnerability run_security ;;
+    dependency-policy) gate dependency-policy pnpm exec knip ;;
+    lock-integrity) gate lock-integrity run_deps_hygiene ;;
+    negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation) run_mutation ;;
+    conformance)
+      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
+      ;;
+    reproducibility)
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      ;;
+    *)
+      printf 'internal error: unhandled capability %s\n' "${phase}" >&2
+      exit 64
+      ;;
   esac
 done

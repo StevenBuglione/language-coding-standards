@@ -34,6 +34,16 @@ disappearing names. After the jobs are observed green on `main`, enable:
 
 `full` is scheduled and is not a pull-request required check.
 
+C#, Kotlin, and Swift workflows may exist as `experimental` packs with
+`inDefault: false`. They are **not** required checks until those languages
+reach `candidate`.
+
 This file is the source for ruleset configuration (WP7). Applying it in
-GitHub requires repository admin access and is not completed by a code
-commit alone.
+GitHub requires repository admin access. Use:
+
+```bash
+gh api repos/StevenBuglione/language-coding-standards/rulesets
+```
+
+to inspect, then create a `main` ruleset that requires the checks above,
+blocks force-push/deletion, and limits bypass.

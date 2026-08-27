@@ -16,15 +16,15 @@ on:
       static_phases:
         required: false
         type: string
-        default: "deps format lint types arch deadcode"
+        default: "bootstrap format lint compile architecture dead-code"
       test_phases:
         required: false
         type: string
-        default: "deps test coverage"
+        default: "bootstrap unit property integration coverage"
       supply_phases:
         required: false
         type: string
-        default: "deps security deps-hygiene negative"
+        default: "bootstrap sast dependency-vulnerability dependency-policy lock-integrity negative-fixtures package"
       timeout_minutes:
         required: false
         type: number

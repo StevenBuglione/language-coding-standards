@@ -1,0 +1,7 @@
+{
+  "fixtures": [
+    {"id": "dead_code", "capability": "dead-code", "diagnostic": "knip"},
+    {"id": "unformatted", "capability": "format"},
+    {"id": "insecure", "capability": "lint", "note": "does not prove dependency-vulnerability"}
+  ]
+}

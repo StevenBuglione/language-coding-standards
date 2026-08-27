@@ -12,6 +12,8 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=capabilities.sh
+source ./capabilities.sh
 
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
@@ -35,45 +37,9 @@ export GOLANGCI_LINT_CACHE="$PWD/.golangci-cache"
 export XDG_CACHE_HOME="$PWD/.cache"
 export PATH="$GOPATH/bin:$PATH"
 
-readonly ALL_PHASES=(
-  deps format lint types arch test coverage deadcode security deps-hygiene negative
-)
-
 usage() {
-  printf 'usage: %s [phase...]\nphases: %s mutation\n' \
-    "${0##*/}" "$(IFS=' '; echo "${ALL_PHASES[*]}")" >&2
-}
-
-select_phases() {
-  local requested
-  if (($# == 0)); then
-    printf '%s\n' "${ALL_PHASES[@]}"
-    return 0
-  fi
-  local phases=()
-  for requested in "$@"; do
-    case "${requested}" in
-      deps | format | lint | types | arch | test | coverage | deadcode | security | deps-hygiene | negative | mutation)
-        phases+=("${requested}")
-        ;;
-      *)
-        printf 'unknown phase: %s\n' "${requested}" >&2
-        usage
-        return 64
-        ;;
-    esac
-  done
-  # Reorder the requested subset into canonical order.
-  local ordered=()
-  for requested in "${ALL_PHASES[@]}" mutation; do
-    local candidate
-    for candidate in "${phases[@]}"; do
-      if [[ "${candidate}" == "${requested}" ]]; then
-        ordered+=("${candidate}")
-      fi
-    done
-  done
-  printf '%s\n' "${ordered[@]}"
+  printf 'usage: %s [capability...]\n' "${0##*/}" >&2
+  printf 'capabilities: %s\n' "${CANONICAL_CAPABILITIES[*]}" >&2
 }
 
 gate() {
@@ -197,38 +163,44 @@ run_deps_hygiene() {
 }
 
 run_mutation() {
-  # Mutation roadmap: gremlins (https://github.com/go-gremlins/gremlins) is
-  # the candidate mutator but still 0.x/unstable, so no kill-score floor is
-  # enforced on any tier yet — a permanently red nightly would just teach
-  # everyone to ignore red. When gremlins ships a stable release, replace
-  # this block with a `gremlins unleash` run whose kill score is parsed and
-  # floored exactly like python's mutmut gate in ../python/verify.sh.
-  if [[ "${VERIFY_TIER:-}" == "full" ]]; then
-    printf 'GATE mutation: SKIP (no stable Go mutator exists yet; gremlins is 0.x — see LANG_SPEC.md roadmap)\n'
-  else
-    printf 'GATE mutation: SKIP (nightly tier only)\n'
-  fi
+  printf 'GATE mutation: SKIP_UNSUPPORTED(no stable Go mutator; gremlins is 0.x)\n'
 }
 
-phase_list="$(select_phases "$@")" || exit $?
-mapfile -t phases <<<"${phase_list}"
+run_package() {
+  go build -o /tmp/warehouse-cmd ./cmd/warehouse
+}
+
+cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
+mapfile -t phases <<<"${cap_list}"
 
 for phase in "${phases[@]}"; do
   case "${phase}" in
-    deps) gate deps run_deps ;;
-    # Explicit dirs, not ./...: golangci-lint fmt walks directories directly
-    # and would otherwise reach into bad_examples/, which must stay excluded
-    # from every main gate by construction (CONTRACTS.md §3).
+    bootstrap) gate bootstrap run_deps ;;
     format) gate format golangci-lint fmt --diff cmd internal ;;
     lint) gate lint run_lint ;;
-    types) gate types run_types ;;
-    arch) gate arch run_arch ;;
-    test) gate test go test -race -shuffle=on -count=1 ./... ;;
+    compile) gate compile run_types ;;
+    architecture) gate architecture run_arch ;;
+    unit) gate unit go test -race -shuffle=on -count=1 ./internal/domain ./internal/adapters ./internal/application ;;
+    property) gate property go test -count=1 ./internal/domain -run 'Commutative|Distributes' ;;
+    integration) gate integration go test -race -count=1 ./internal/application -run PlaceOrder ;;
+    package) gate package run_package ;;
     coverage) gate coverage run_coverage ;;
-    deadcode) gate deadcode run_deadcode ;;
-    security) gate security govulncheck ./... ;;
-    deps-hygiene) gate deps-hygiene run_deps_hygiene ;;
-    negative) gate negative bash bad_examples/assert.sh ;;
+    dead-code) gate dead-code run_deadcode ;;
+    sast) gate sast golangci-lint run --default=none -E gosec ./... ;;
+    dependency-vulnerability) gate dependency-vulnerability govulncheck ./... ;;
+    dependency-policy) gate dependency-policy go mod tidy -diff ;;
+    lock-integrity) gate lock-integrity go mod verify ;;
+    negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation) run_mutation ;;
+    conformance)
+      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
+      ;;
+    reproducibility)
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      ;;
+    *)
+      printf 'internal error: unhandled capability %s\n' "${phase}" >&2
+      exit 64
+      ;;
   esac
 done

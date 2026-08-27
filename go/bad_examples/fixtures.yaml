@@ -1,0 +1,7 @@
+{
+  "fixtures": [
+    {"id": "insecure", "capability": "sast", "diagnostic": "G101"},
+    {"id": "dead_code", "capability": "dead-code", "diagnostic": "unreachable"},
+    {"id": "unformatted", "capability": "format"}
+  ]
+}

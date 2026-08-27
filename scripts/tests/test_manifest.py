@@ -21,6 +21,12 @@ class ManifestLoadTests(unittest.TestCase):
         ids = [lang.id for lang in manifest.select()]
         self.assertEqual(ids, ["go", "java", "python", "rust", "typescript"])
 
+    def test_in_default_false_is_excluded_even_if_experimental(self) -> None:
+        catalog = manifest.load()
+        for lang in catalog.values():
+            if not lang.in_default:
+                self.assertNotIn(lang.id, [item.id for item in manifest.select()])
+
     def test_planned_languages_are_excluded_from_defaults(self) -> None:
         ids = {lang.id for lang in manifest.select()}
         self.assertNotIn("csharp", ids)

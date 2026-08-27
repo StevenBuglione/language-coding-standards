@@ -12,6 +12,8 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=capabilities.sh
+source ./capabilities.sh
 
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
@@ -42,45 +44,9 @@ export CARGO_INCREMENTAL=0
 mkdir -p .cargo-home .cache
 export PATH="${CARGO_HOME}/bin:${PATH}"
 
-readonly ALL_PHASES=(
-  deps format lint types arch test coverage deadcode security deps-hygiene negative
-)
-
 usage() {
-  printf 'usage: %s [phase...]\nphases: %s mutation\n' \
-    "${0##*/}" "$(IFS=' '; echo "${ALL_PHASES[*]}")" >&2
-}
-
-select_phases() {
-  local requested
-  if (($# == 0)); then
-    printf '%s\n' "${ALL_PHASES[@]}"
-    return 0
-  fi
-  local phases=()
-  for requested in "$@"; do
-    case "${requested}" in
-      deps | format | lint | types | arch | test | coverage | deadcode | security | deps-hygiene | negative | mutation)
-        phases+=("${requested}")
-        ;;
-      *)
-        printf 'unknown phase: %s\n' "${requested}" >&2
-        usage
-        return 64
-        ;;
-    esac
-  done
-  # Reorder the requested subset into canonical order.
-  local ordered=()
-  for requested in "${ALL_PHASES[@]}" mutation; do
-    local candidate
-    for candidate in "${phases[@]}"; do
-      if [[ "${candidate}" == "${requested}" ]]; then
-        ordered+=("${candidate}")
-      fi
-    done
-  done
-  printf '%s\n' "${ordered[@]}"
+  printf 'usage: %s [capability...]\n' "${0##*/}" >&2
+  printf 'capabilities: %s\n' "${CANONICAL_CAPABILITIES[*]}" >&2
 }
 
 gate() {
@@ -195,7 +161,7 @@ run_mutation() {
     # ("killed X of Y") is parsed from the summary; an unparseable summary
     # FAILS the gate rather than silently passing.
     install_tool cargo-mutants "${CARGO_MUTANTS_VERSION}" || return 1
-    local floor="${MUTATION_FLOOR:-70}"
+    local floor=70
     local log rc killed total score
     log="$(mktemp)"
     rc=0
@@ -221,26 +187,47 @@ run_mutation() {
       exit 1
     fi
   else
-    printf 'GATE mutation: SKIP (nightly tier only)\n'
+    printf 'GATE mutation: SKIP_UNSUPPORTED(full tier only)\n'
   fi
 }
 
-phase_list="$(select_phases "$@")" || exit $?
-mapfile -t phases <<<"${phase_list}"
+run_package() {
+  cargo package -p warehouse-domain --locked --allow-dirty --no-verify
+}
+
+cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
+mapfile -t phases <<<"${cap_list}"
 
 for phase in "${phases[@]}"; do
   case "${phase}" in
-    deps) gate deps run_deps ;;
+    bootstrap) gate bootstrap run_deps ;;
     format) gate format cargo fmt --all --check ;;
     lint) gate lint run_lint ;;
-    types) gate types run_types ;;
-    arch) gate arch run_arch ;;
-    test) gate test cargo nextest run --locked ;;
+    compile) gate compile run_types ;;
+    architecture) gate architecture run_arch ;;
+    unit) gate unit cargo nextest run --locked --lib --bins ;;
+    property) gate property cargo test --doc --workspace --all-features --locked ;;
+    integration) gate integration cargo nextest run --locked --test place_order ;;
+    package) gate package run_package ;;
     coverage) gate coverage run_coverage ;;
-    deadcode) gate deadcode cargo shear ;;
-    security) gate security cargo deny check advisories bans licenses sources ;;
-    deps-hygiene) gate deps-hygiene run_deps_hygiene ;;
-    negative) gate negative bash bad_examples/assert.sh ;;
+    dead-code)
+      printf 'GATE dead-code: SKIP_UNSUPPORTED(public library surface; compiler unused is deny in lib, cargo-shear is unused-deps)\n'
+      ;;
+    sast) gate sast env CARGO_BUILD_WARNINGS=deny cargo clippy --all-targets --locked -- -D warnings ;;
+    dependency-vulnerability) gate dependency-vulnerability cargo deny check advisories ;;
+    dependency-policy) gate dependency-policy cargo shear && cargo deny check bans licenses sources ;;
+    lock-integrity) gate lock-integrity run_deps_hygiene ;;
+    negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation) run_mutation ;;
+    conformance)
+      printf 'GATE conformance: SKIP_UNSUPPORTED(adapter not yet wired to shared JSON vectors)\n'
+      ;;
+    reproducibility)
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      ;;
+    *)
+      printf 'internal error: unhandled capability %s\n' "${phase}" >&2
+      exit 64
+      ;;
   esac
 done

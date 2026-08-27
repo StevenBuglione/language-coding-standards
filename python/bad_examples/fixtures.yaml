@@ -1,0 +1,11 @@
+{
+  "capability": "negative-fixtures",
+  "fixtures": [
+    {"id": "too_complex", "capability": "lint", "diagnostic": "PLR0912"},
+    {"id": "type_violation", "capability": "compile", "diagnostic": "reportArgumentType"},
+    {"id": "arch_violation", "capability": "architecture", "diagnostic": "Broken contracts"},
+    {"id": "dead_code", "capability": "dead-code", "diagnostic": "orphaned_helper"},
+    {"id": "insecure", "capability": "sast", "diagnostic": "S105"},
+    {"id": "unformatted", "capability": "format", "diagnostic": "would be reformatted"}
+  ]
+}

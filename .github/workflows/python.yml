@@ -39,5 +39,5 @@ jobs:
     uses: ./.github/workflows/reusable-verify.yml
     with:
       language: python
-      image: python:3.13
+      image: python:3.13-slim
       setup: pip install --no-cache-dir uv==0.12.6

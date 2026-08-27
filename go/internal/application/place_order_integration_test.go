@@ -72,8 +72,8 @@ func assertHappyPathOrder(t *testing.T, order *domain.Order) {
 }
 
 func requireStoredOrder(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	repository *adapters.InMemoryOrderRepository,
 	id domain.OrderID,
 ) *domain.Order {
@@ -120,7 +120,7 @@ func TestPlaceOrderHappyPath(t *testing.T) {
 		p.useCase.Execute(ctx, orderLines("SKU-A"), "idem-1"),
 	)
 	assertHappyPathOrder(t, order)
-	stored := requireStoredOrder(t, ctx, p.repository, order.ID())
+	stored := requireStoredOrder(ctx, t, p.repository, order.ID())
 	assertHappyPathOrder(t, stored)
 	assertHappyPathSideEffects(t, p)
 	assertOrderTotal(t, stored)

@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 /**
- * Deterministic generative money tests. jqwik is denylisted; this harness
- * replays a committed seed schedule rather than claiming shrinking.
+ * Deterministic generative money tests. jqwik is denylisted; this harness replays a committed seed
+ * schedule rather than claiming shrinking.
  */
 final class GenerativeMoneyTest {
 

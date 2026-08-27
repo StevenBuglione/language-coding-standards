@@ -7,7 +7,6 @@
 #
 # Prints exactly one "GATE <phase>: PASS" line per phase on stdout; tool
 # diagnostics go to stderr. Exits nonzero at the first failing phase.
-# The optional `mutation` phase runs only with VERIFY_TIER=full (nightly).
 
 set -euo pipefail
 
@@ -17,6 +16,10 @@ source ./capabilities.sh
 
 # Container preamble (CONTRACTS.md §4): trust the mounted workspace.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-/workspace}" >/dev/null 2>&1 || true
+
+readonly REQUIRED_PYTHON_MINOR="3.13"
+readonly REQUIRED_UV_VERSION="0.12.6"
+readonly MUTATION_FLOOR=70
 
 usage() {
   printf 'usage: %s [capability...]\n' "${0##*/}" >&2
@@ -42,17 +45,32 @@ gate() {
   fi
 }
 
+uv_run() {
+  # uv otherwise re-locks automatically before executing. --locked turns any
+  # metadata/lock drift into an error instead of mutating evidence during CI.
+  uv run --locked "$@"
+}
+
+run_bootstrap() {
+  local python_minor uv_version
+  python_minor="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  if [[ "${python_minor}" != "${REQUIRED_PYTHON_MINOR}" ]]; then
+    printf 'Python minor %s does not match required %s\n' \
+      "${python_minor}" "${REQUIRED_PYTHON_MINOR}" >&2
+    return 1
+  fi
+  uv_version="$(uv --version | awk '{print $2}')"
+  if [[ "${uv_version}" != "${REQUIRED_UV_VERSION}" ]]; then
+    printf 'uv version %s does not match required %s\n' \
+      "${uv_version:-unknown}" "${REQUIRED_UV_VERSION}" >&2
+    return 1
+  fi
+  uv sync --locked
+}
+
 run_security() {
-  # The synced env contains the local project itself, which PyPI cannot
-  # audit; --strict rightly refuses to skip anything. So audit the exact
-  # locked pin set instead: exported fresh from uv.lock (--no-emit-project
-  # drops only the local root), audited with --strict --no-deps so every
-  # third-party package in the environment must resolve cleanly or fail.
-  #
-  # errexit is suspended inside gate()'s `|| rc=$?` capture, so EVERY
-  # fallible step here must fail explicitly: a failed export returns 1
-  # instead of falling through to auditing a stale requirements file, and
-  # the file is removed upfront so no prior run can leave one behind.
+  # Audit the exact third-party pin set exported fresh from uv.lock. The local
+  # project is omitted because it is not a PyPI distribution.
   local reqs=".cache/pip-audit-requirements.txt"
   rm -f "${reqs}"
   mkdir -p .cache
@@ -60,10 +78,8 @@ run_security() {
     printf 'dependency export failed; cannot audit fresh pins\n' >&2
     return 1
   fi
-  uv run pip-audit --strict --no-deps -r "${reqs}"
+  uv_run pip-audit --strict --no-deps -r "${reqs}"
 }
-
-readonly MUTATION_FLOOR=70
 
 run_mutation() {
   if [[ "${VERIFY_TIER:-}" != "full" ]]; then
@@ -73,9 +89,10 @@ run_mutation() {
   local log rc killed total score
   log="$(mktemp)"
   rc=0
-  uv run mutmut run >"${log}" 2>&1 || rc=$?
+  uv_run mutmut run >"${log}" 2>&1 || rc=$?
   if ((rc != 0)); then
     tail -n 25 "${log}" >&2
+    rm -f "${log}"
     printf 'GATE mutation: FAIL (mutmut exited %s)\n' "${rc}"
     exit "${rc}"
   fi
@@ -83,6 +100,7 @@ run_mutation() {
   total="$(grep -oE '[0-9]+ of [0-9]+' "${log}" | grep -oE '[0-9]+$' || true)"
   if [[ -z "${killed}" || -z "${total}" || "${total}" -eq 0 ]]; then
     tail -n 25 "${log}" >&2
+    rm -f "${log}"
     printf 'GATE mutation: FAIL (no parsable mutmut summary)\n'
     exit 1
   fi
@@ -97,20 +115,22 @@ run_mutation() {
 }
 
 run_package() {
-  local tmp
+  local tmp wheel
   tmp="$(mktemp -d)"
-  if ! uv build --out-dir "${tmp}"; then
+  if ! uv build --locked --out-dir "${tmp}"; then
     rm -rf "${tmp}"
     return 1
   fi
-  local wheel
-  wheel="$(find "${tmp}" -name '*.whl' | head -n 1)"
+  wheel="$(find "${tmp}" -name '*.whl' -print -quit)"
   if [[ -z "${wheel}" ]]; then
     printf 'uv build produced no wheel\n' >&2
     rm -rf "${tmp}"
     return 1
   fi
-  python -m venv "${tmp}/consumer"
+  if ! python -m venv "${tmp}/consumer"; then
+    rm -rf "${tmp}"
+    return 1
+  fi
   # shellcheck disable=SC1091
   source "${tmp}/consumer/bin/activate" 2>/dev/null || source "${tmp}/consumer/Scripts/activate"
   if ! pip install --no-deps "${wheel}"; then
@@ -118,20 +138,40 @@ run_package() {
     rm -rf "${tmp}"
     return 1
   fi
-  python -c "from warehouse.domain.money import Money; Money(0, 'USD')"
+  if ! python -c "from warehouse.domain.money import Money; assert Money(0, 'USD').currency == 'USD'"; then
+    deactivate || true
+    rm -rf "${tmp}"
+    return 1
+  fi
   deactivate || true
   rm -rf "${tmp}"
 }
 
-run_pytest_dir() {
-  local dir="$1"
-  local collected
-  collected="$(uv run pytest "${dir}" -q --collect-only)"
-  if ! grep -qE '[1-9][0-9]* tests collected' <<<"${collected}"; then
-    printf 'zero tests collected under %s\n' "${dir}" >&2
+ensure_pytest_collection() {
+  local scope="$1" collected rc
+  collected=""
+  rc=0
+  collected="$(uv_run pytest "${scope}" -q --collect-only 2>&1)" || rc=$?
+  printf '%s\n' "${collected}" >&2
+  if ((rc != 0)); then
+    printf 'pytest collection failed under %s\n' "${scope}" >&2
+    return "${rc}"
+  fi
+  if ! grep -qE '[1-9][0-9]* tests? collected' <<<"${collected}"; then
+    printf 'zero tests collected under %s\n' "${scope}" >&2
     return 1
   fi
-  uv run pytest "${dir}" -q
+}
+
+run_pytest_scope() {
+  local scope="$1"
+  shift
+  ensure_pytest_collection "${scope}" || return 1
+  uv_run pytest "${scope}" "$@"
+}
+
+run_coverage() {
+  CI=true run_pytest_scope tests -q --cov=warehouse --cov-branch --cov-report=term-missing
 }
 
 cap_list="$(expand_capabilities "$@")" || { usage; exit 64; }
@@ -139,18 +179,18 @@ mapfile -t phases <<<"${cap_list}"
 
 for phase in "${phases[@]}"; do
   case "${phase}" in
-    bootstrap) gate bootstrap uv sync --locked ;;
-    format) gate format uv run ruff format --check . ;;
-    lint) gate lint uv run ruff check . ;;
-    compile) gate compile uv run basedpyright ;;
-    architecture) gate architecture uv run lint-imports ;;
-    unit) gate unit run_pytest_dir tests/unit ;;
-    property) gate property run_pytest_dir tests/property ;;
-    integration) gate integration run_pytest_dir tests/integration ;;
+    bootstrap) gate bootstrap run_bootstrap ;;
+    format) gate format uv_run ruff format --check . ;;
+    lint) gate lint uv_run ruff check . ;;
+    compile) gate compile uv_run basedpyright ;;
+    architecture) gate architecture uv_run lint-imports ;;
+    unit) gate unit run_pytest_scope tests/unit -q ;;
+    property) gate property run_pytest_scope tests/property -q ;;
+    integration) gate integration run_pytest_scope tests/integration -q ;;
     package) gate package run_package ;;
-    coverage) CI=true gate coverage uv run pytest tests -q --cov=warehouse --cov-branch --cov-report=term-missing ;;
-    dead-code) gate dead-code uv run vulture src vulture_whitelist.py --min-confidence 80 ;;
-    sast) gate sast uv run ruff check src --select S ;;
+    coverage) gate coverage run_coverage ;;
+    dead-code) gate dead-code uv_run vulture src vulture_whitelist.py --min-confidence 80 ;;
+    sast) gate sast uv_run ruff check src --select S ;;
     dependency-vulnerability) gate dependency-vulnerability run_security ;;
     dependency-policy)
       printf 'GATE dependency-policy: SKIP_UNSUPPORTED(lock integrity is separate; no unused-dependency policy tool)\n'
@@ -158,9 +198,9 @@ for phase in "${phases[@]}"; do
     lock-integrity) gate lock-integrity uv lock --check ;;
     negative-fixtures) gate negative-fixtures bash bad_examples/assert.sh ;;
     mutation) run_mutation ;;
-    conformance) gate conformance uv run pytest tests/conformance -q ;;
+    conformance) gate conformance run_pytest_scope tests/conformance -q ;;
     reproducibility)
-      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is WP7 root evidence)\n'
+      printf 'GATE reproducibility: SKIP_UNSUPPORTED(two-clean-build comparison is root evidence)\n'
       ;;
     *)
       printf 'internal error: unhandled capability %s\n' "${phase}" >&2

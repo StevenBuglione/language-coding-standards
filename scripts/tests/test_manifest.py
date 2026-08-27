@@ -35,7 +35,7 @@ class ManifestLoadTests(unittest.TestCase):
 
     def test_planned_filter_lists_only_planned(self) -> None:
         ids = [lang.id for lang in manifest.select(states=["planned"])]
-        self.assertEqual(ids, ["kotlin", "swift"])
+        self.assertEqual(ids, [])
 
     def test_unknown_language_exits_64(self) -> None:
         completed = subprocess.run(

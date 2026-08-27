@@ -106,7 +106,7 @@ class ExpandCapabilitiesTests(unittest.TestCase):
 
     def test_language_copies_match_canonical(self) -> None:
         canonical = EXPANDER.read_text(encoding="utf-8")
-        for lang in ("go", "java", "python", "rust", "typescript"):
+        for lang in ("go", "java", "python", "rust", "typescript", "csharp", "kotlin", "swift"):
             copy = ROOT / lang / "capabilities.sh"
             self.assertTrue(copy.exists(), f"missing {copy}")
             self.assertEqual(copy.read_text(encoding="utf-8"), canonical)

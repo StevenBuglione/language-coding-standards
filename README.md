@@ -21,9 +21,9 @@ alone does not make a pack `reference`.
 | Python | [`python/`](./python) | experimental | [`python/LANG_SPEC.md`](./python/LANG_SPEC.md) |
 | Rust | [`rust/`](./rust) | experimental | [`rust/LANG_SPEC.md`](./rust/LANG_SPEC.md) |
 | TypeScript | [`typescript/`](./typescript) | experimental | [`typescript/LANG_SPEC.md`](./typescript/LANG_SPEC.md) |
-| C# | — | planned | [ADR-005](docs/adr/005-planned-language-onboarding.md) |
-| Kotlin | — | planned | [ADR-005](docs/adr/005-planned-language-onboarding.md) |
-| Swift | — | planned | [ADR-005](docs/adr/005-planned-language-onboarding.md) |
+| C# | [`csharp/`](./csharp) | experimental (not in default verify) | [`csharp/LANG_SPEC.md`](./csharp/LANG_SPEC.md) |
+| Kotlin | [`kotlin/`](./kotlin) | experimental (not in default verify) | [`kotlin/LANG_SPEC.md`](./kotlin/LANG_SPEC.md) |
+| Swift | [`swift/`](./swift) | experimental (not in default verify) | [`swift/LANG_SPEC.md`](./swift/LANG_SPEC.md) |
 
 Default `scripts/verify-all.sh` selects the five experimental packs. It does
 not build C#, Kotlin, or Swift.
